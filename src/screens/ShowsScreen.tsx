@@ -12,7 +12,7 @@ import { markEpisodes, epKey } from '../db/repo';
 import { toggleEpisode } from '../db/actions';
 import type { WatchMap } from '../db/hooks';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
-import { useLibrary, type ShowState } from '../lib/library';
+import { bucketOf, useLibrary, type Bucket, type ShowState } from '../lib/library';
 import { buildUpcoming, upcomingSeasons, type UpcomingKind } from '../lib/upcoming';
 import { db } from '../lib/db';
 import { useUi, type ShowsTab } from '../store/ui';
@@ -80,12 +80,27 @@ function Watchlist({ scrollRef, ...nav }: { scrollRef: React.RefObject<HTMLDivEl
   const lib = useLibrary();
   const navigate = useNavigate();
   const items = useMemo<Item[]>(() => {
-    const open = lib.shows.filter((s) => s.follow.status === 'active' && s.next);
-    const started = open.filter((s) => s.started).sort((a, b) => (b.follow.lastWatchedAt ?? 0) - (a.follow.lastWatchedAt ?? 0));
-    const fresh = open.filter((s) => !s.started).sort((a, b) => b.follow.addedAt - a.follow.addedAt);
+    const now = Date.now();
+    const byBucket = new Map<Bucket, ShowState[]>();
+    for (const s of lib.shows) {
+      if (!s.next) continue;
+      const b = bucketOf(s, now);
+      if (b === 'dropped' || b === 'completed') continue;
+      byBucket.set(b, [...(byBucket.get(b) ?? []), s]);
+    }
+    const recent = (a: ShowState, b: ShowState) => (b.follow.lastWatchedAt ?? b.follow.addedAt) - (a.follow.lastWatchedAt ?? a.follow.addedAt);
+    const SECTIONS: { id: Bucket; label: string }[] = [
+      { id: 'watching', label: 'En cours' },
+      { id: 'notstarted', label: 'Pas commencé' },
+      { id: 'stale', label: 'Pas regardé depuis un moment' },
+      { id: 'later', label: 'À regarder plus tard' },
+    ];
     const out: Item[] = [];
-    if (started.length) out.push({ type: 'chip', label: 'A voir', grid: true }, ...started.map((state): Item => ({ type: 'card', state })));
-    if (fresh.length) out.push({ type: 'chip', label: 'Pas commencé', grid: !started.length }, ...fresh.map((state): Item => ({ type: 'card', state })));
+    for (const sec of SECTIONS) {
+      const list = (byBucket.get(sec.id) ?? []).sort(sec.id === 'notstarted' ? (a, b) => b.follow.addedAt - a.follow.addedAt : recent);
+      if (!list.length) continue;
+      out.push({ type: 'chip', label: sec.label, grid: !out.length }, ...list.map((state): Item => ({ type: 'card', state })));
+    }
     return out;
   }, [lib.shows]);
 

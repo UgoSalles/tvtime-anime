@@ -1,4 +1,5 @@
 import { fetchJikanEpisodes } from './jikan';
+import type { KitsuEpisode } from './kitsu';
 import type { EpisodeInfo, FranchiseSeason } from './types';
 
 const EP_RE = /^\s*(?:episode|épisode|ep\.?)\s*(\d+)\s*[-–:]\s*(.+)$/i;
@@ -72,6 +73,16 @@ export function mergeStreaming(list: SeasonEpisodes, streaming: { title: string;
   const episodes = list.episodes.map((e) => {
     const st = m.get(e.number);
     return st ? { ...e, title: e.title ?? st.title, thumbnail: st.thumbnail } : e;
+  });
+  return { ...list, episodes, degraded: list.degraded && !episodes.some((e) => e.title) };
+}
+
+/** Complète une liste avec les vraies images d'épisode (Kitsu), prioritaires, et les titres/dates manquants. */
+export function mergeKitsu(list: SeasonEpisodes, kitsu: Record<number, KitsuEpisode> | undefined): SeasonEpisodes {
+  if (!kitsu) return list;
+  const episodes = list.episodes.map((e) => {
+    const k = kitsu[e.number];
+    return k ? { ...e, title: e.title ?? k.title, aired: e.aired ?? k.aired, thumbnail: k.thumb ?? e.thumbnail, thumbnailLarge: k.large ?? e.thumbnailLarge } : e;
   });
   return { ...list, episodes, degraded: list.degraded && !episodes.some((e) => e.title) };
 }

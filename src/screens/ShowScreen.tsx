@@ -9,9 +9,11 @@ import { useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
 import { EPISODES_PER_PAGE } from '../api/episodes';
 import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
+import { useFrench } from '../api/translate';
+import { genreFr } from '../lib/genres';
 import { layout } from '../theme';
 import { useFollowOf, useListsOfShow, useLists, useWatchedMap, type WatchMap } from '../db/hooks';
-import { addToList, allAired, airedOf, createList, ensureFollow, epKey, markEpisodes, removeFromList, setDropped, toggleFavorite, unfollow } from '../db/repo';
+import { addToList, allAired, airedOf, createList, ensureFollow, epKey, markEpisodes, removeFromList, setDropped, setLater, toggleFavorite, unfollow } from '../db/repo';
 import { toggleAll, toggleEpisode, toggleSeason } from '../db/actions';
 import { openActions, useSheet } from '../store/sheet';
 
@@ -28,7 +30,12 @@ const SEASON: Record<string, string> = { WINTER: 'Hiver', SPRING: 'Printemps', S
 const FORMAT: Record<string, string> = { TV: 'Série TV', TV_SHORT: 'Série courte', ONA: 'ONA', MOVIE: 'Film', OVA: 'OVA', SPECIAL: 'Spécial', MUSIC: 'Clip' };
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
-const stripHtml = (s: string) => s.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+const stripHtml = (s: string) =>
+  s
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s*\((?:Source|Written by)[^)]*\)\s*$/i, '')
+    .trim();
 
 function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   season: FranchiseSeason;
@@ -39,7 +46,8 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   const [page, setPage] = useState(1);
   const q = useEpisodeList(franchise, season, page);
   const data = q.data;
-  const fallback = season.anime.banner ?? season.anime.cover;
+  // Images d'épisode réelles uniquement : pas d'image de remplacement. Si aucun épisode n'en a, on n'affiche que le numéro.
+  const withImages = !!data?.episodes.some((e) => e.thumbnail) || q.thumbsLoading;
   if (!data) return <p className="px-4 py-4 text-[13px] text-ink-3">Épisodes indisponibles (hors-ligne ?).</p>;
   return (
     <div className="border-t border-divider">
@@ -67,10 +75,17 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
             className="flex items-center gap-3 border-b border-divider px-4 py-2.5 last:border-b-0"
             style={{ contentVisibility: 'auto', containIntrinsicSize: '0 74px' }}
           >
-            {/* Vignette de l'épisode (AniList) ; à défaut, la bannière / jaquette de la saison. */}
-            <Poster title="" src={e.thumbnail ?? fallback} color={season.anime.color} showTitle={false} className="h-[54px] w-24 shrink-0 rounded-[4px]">
-              <span className="absolute bottom-0 left-0 rounded-tr-[4px] bg-black/70 px-1.5 text-[11px] font-bold leading-[16px] text-white">{e.number}</span>
-            </Poster>
+            {withImages ? (
+              e.thumbnail ? (
+                <Poster title="" src={e.thumbnail} color={season.anime.color} showTitle={false} className="h-[54px] w-24 shrink-0 rounded-[4px]">
+                  <span className="absolute bottom-0 left-0 rounded-tr-[4px] bg-black/70 px-1.5 text-[11px] font-bold leading-[16px] text-white">{e.number}</span>
+                </Poster>
+              ) : (
+                <span className="grid h-[54px] w-24 shrink-0 place-items-center rounded-[4px] bg-chip text-[15px] font-bold text-chip-text">{e.number}</span>
+              )
+            ) : (
+              <span className="w-8 shrink-0 text-center text-[15px] font-bold text-ink-3">{e.number}</span>
+            )}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${e.number}`}</span>
               <span className="block truncate text-[11px] text-ink-3">
@@ -87,8 +102,9 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   );
 }
 
-function SeasonSynopsis({ text }: { text: string }) {
+function SeasonSynopsis({ text: source }: { text: string }) {
   const [more, setMore] = useState(false);
+  const text = useFrench(source) ?? source;
   return (
     <div className="border-t border-divider px-4 py-3">
       <p className={`whitespace-pre-line text-[13px] leading-[19px] text-ink-2 ${more ? '' : 'line-clamp-3'}`}>{text}</p>
@@ -116,10 +132,10 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
     <div className="pb-10">
       {next && (
         <>
-          <div className="py-4 text-center text-section-chip uppercase text-ink-2">Watch next</div>
+          <div className="py-4 text-center text-section-chip uppercase text-ink-2">À voir ensuite</div>
           <div className="px-page">
             <button onClick={() => onOpenEpisode(next.season.anime.id, next.episode)} className="block w-full text-left">
-              <Poster title="" src={nextInfo?.thumbnail ?? next.season.anime.banner ?? next.season.anime.coverLarge} color={next.season.anime.color} showTitle={false} className="h-[88px] w-full rounded-card">
+              <Poster title="" src={nextInfo?.thumbnailLarge ?? nextInfo?.thumbnail} color={next.season.anime.color} showTitle={false} className="h-[88px] w-full rounded-card">
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-[12px] font-bold text-white">
                   S{String(next.season.number).padStart(2, '0')} | E{String(next.episode).padStart(2, '0')} · {nextInfo?.title ?? `Épisode ${next.episode}`}
                 </span>
@@ -184,7 +200,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
 
 function AboutTab({ detail, onOpenShow }: { detail: AnimeDetail; onOpenShow: (id: number) => void }) {
   const [more, setMore] = useState(false);
-  const desc = detail.description ? stripHtml(detail.description) : null;
+  const desc = useFrench(detail.description ? stripHtml(detail.description) : null);
   const rows: [string, string | null][] = [
     ['Format', FORMAT[detail.format ?? ''] ?? null],
     ['Statut', STATUS[detail.status ?? ''] ?? null],
@@ -211,7 +227,7 @@ function AboutTab({ detail, onOpenShow }: { detail: AnimeDetail; onOpenShow: (id
           ))}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {detail.genres.map((g) => <span key={g} className="rounded-full bg-chip px-3 py-1 text-[11px] font-bold uppercase text-chip-text">{g}</span>)}
+          {detail.genres.map((g) => <span key={g} className="rounded-full bg-chip px-3 py-1 text-[11px] font-bold uppercase text-chip-text">{genreFr(g)}</span>)}
         </div>
       </section>
       {detail.characters.length > 0 && (
@@ -272,6 +288,7 @@ function openMenu(f: Franchise, follow: Awaited<ReturnType<typeof ensureFollow>>
   actions.push({ label: 'Tout marquer comme vu', onClick: () => markEpisodes(f, aired, true) });
   actions.push({ label: 'Tout démarquer', onClick: () => markEpisodes(f, aired, false), destructive: true });
   if (follow) {
+    if (follow.status !== 'dropped') actions.push({ label: follow.later ? 'Retirer de « À regarder plus tard »' : 'Mettre dans « À regarder plus tard »', onClick: () => setLater(f.rootId, !follow.later) });
     actions.push({ label: follow.status === 'dropped' ? 'Reprendre le suivi' : 'Arrêter de regarder', onClick: () => setDropped(f.rootId, follow.status !== 'dropped') });
     actions.push({ label: 'Ne plus suivre', onClick: () => unfollow(f.rootId), destructive: true });
   }

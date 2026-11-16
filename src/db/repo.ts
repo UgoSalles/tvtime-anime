@@ -35,6 +35,7 @@ export async function followAnime(animeId: number): Promise<number> {
 /** Ne plus suivre : l'historique « vu » est conservé (re-suivre le restaure). */
 export const unfollow = (showId: number) => db.follows.delete(showId);
 export const setDropped = (showId: number, dropped: boolean) => db.follows.update(showId, { status: dropped ? 'dropped' : 'active' });
+export const setLater = (showId: number, later: boolean) => db.follows.update(showId, { later });
 export async function toggleFavorite(showId: number) {
   const f = await db.follows.get(showId);
   if (f) await db.follows.update(showId, { favorite: !f.favorite });
@@ -73,7 +74,7 @@ export async function markEpisodes(f: Franchise, eps: EpRef[], watched: boolean)
   await db.transaction('rw', db.watched, db.follows, async () => {
     if (watched) {
       await db.watched.bulkPut(eps.map((e) => ({ ...e, showId: f.rootId, watchedAt: now })));
-      await db.follows.update(follow.showId, { lastWatchedAt: now });
+      await db.follows.update(follow.showId, { lastWatchedAt: now, later: false });
     } else {
       await db.watched.bulkDelete(eps.map((e) => [e.seasonId, e.episode] as [number, number]));
     }
@@ -92,7 +93,7 @@ export async function rewatchEpisodes(f: Franchise, eps: EpRef[]) {
     await db.watched.bulkPut(
       eps.map((e, i) => ({ ...e, showId: f.rootId, watchedAt: now, count: existing[i] ? (existing[i]!.count ?? 1) + 1 : 1 })),
     );
-    await db.follows.update(follow.showId, { lastWatchedAt: now, status: 'active' });
+    await db.follows.update(follow.showId, { lastWatchedAt: now, status: 'active', later: false });
   });
 }
 

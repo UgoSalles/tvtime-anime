@@ -4,7 +4,7 @@ import { Poster } from '../components/Poster';
 import { useListItems, useLists } from '../db/hooks';
 import { deleteList, removeFromList, renameList } from '../db/repo';
 import { useTitle } from '../lib/titles';
-import { useLibrary, type ShowState } from '../lib/library';
+import { bucketOf, useLibrary, type ShowState } from '../lib/library';
 import { openActions, useSheet } from '../store/sheet';
 
 export function ViewHeader({ title, onBack, right }: { title: string; onBack: () => void; right?: React.ReactNode }) {
@@ -19,17 +19,19 @@ export function ViewHeader({ title, onBack, right }: { title: string; onBack: ()
   );
 }
 
-type Filter = 'watching' | 'completed' | 'dropped' | 'favorites' | 'all';
+type Filter = 'watching' | 'notstarted' | 'stale' | 'later' | 'completed' | 'dropped' | 'favorites' | 'all';
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'watching', label: 'En cours' },
+  { id: 'notstarted', label: 'Pas commencé' },
+  { id: 'stale', label: 'Pas regardé depuis un moment' },
+  { id: 'later', label: 'À regarder plus tard' },
   { id: 'completed', label: 'Terminés' },
   { id: 'dropped', label: 'Arrêtés' },
   { id: 'favorites', label: 'Favoris' },
   { id: 'all', label: 'Tous' },
 ];
 
-const matches = (s: ShowState, f: Filter) =>
-  f === 'all' ? true : f === 'favorites' ? s.follow.favorite : f === 'dropped' ? s.follow.status === 'dropped' : f === 'completed' ? s.follow.status === 'active' && s.completed : s.follow.status === 'active' && !s.completed;
+const matches = (s: ShowState, f: Filter, now: number) => (f === 'all' ? true : f === 'favorites' ? s.follow.favorite : bucketOf(s, now) === f);
 
 function ShowGrid({ shows, onOpenShow, empty }: { shows: ShowState[]; onOpenShow: (id: number) => void; empty: string }) {
   const t = useTitle();
@@ -51,13 +53,14 @@ function ShowGrid({ shows, onOpenShow, empty }: { shows: ShowState[]; onOpenShow
   );
 }
 
-/** « Voir tout » du profil : en cours / terminés / arrêtés / favoris. Absent des captures (SPEC §4.7). */
+/** « Voir tout » du profil : en cours / pas commencé / pas regardé depuis un moment / à regarder plus tard / terminés / arrêtés / favoris. Absent des captures (SPEC §4.7). */
 export function LibraryView({ onBack, onOpenShow, initial = 'watching' }: { onBack: () => void; onOpenShow: (id: number) => void; initial?: Filter }) {
   const lib = useLibrary();
   const [filter, setFilter] = useState<Filter>(initial);
+  const now = useMemo(() => Date.now(), []);
   const list = useMemo(
-    () => lib.shows.filter((s) => matches(s, filter)).sort((a, b) => (b.follow.lastWatchedAt ?? b.follow.addedAt) - (a.follow.lastWatchedAt ?? a.follow.addedAt)),
-    [lib.shows, filter],
+    () => lib.shows.filter((s) => matches(s, filter, now)).sort((a, b) => (b.follow.lastWatchedAt ?? b.follow.addedAt) - (a.follow.lastWatchedAt ?? a.follow.addedAt)),
+    [lib.shows, filter, now],
   );
   return (
     <div className="flex h-full flex-col bg-surface">
@@ -66,7 +69,7 @@ export function LibraryView({ onBack, onOpenShow, initial = 'watching' }: { onBa
         <div className="scroll-x flex gap-2 px-page pb-3">
           {FILTERS.map((f) => (
             <button key={f.id} onClick={() => setFilter(f.id)} className={`h-8 shrink-0 rounded-full px-3 text-[12px] font-bold uppercase tracking-wide ${filter === f.id ? 'bg-yellow text-black' : 'bg-chip text-chip-text'}`}>
-              {f.label} <span className="opacity-60">{lib.shows.filter((s) => matches(s, f.id)).length}</span>
+              {f.label} <span className="opacity-60">{lib.shows.filter((s) => matches(s, f.id, now)).length}</span>
             </button>
           ))}
         </div>

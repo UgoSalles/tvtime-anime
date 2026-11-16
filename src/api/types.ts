@@ -75,6 +75,8 @@ export interface EpisodeInfo {
   filler?: boolean;
   recap?: boolean;
   thumbnail?: string | null;
+  /** Version plus grande (en-tête de la fiche épisode). */
+  thumbnailLarge?: string | null;
 }
 
 export type StreamingMap = Record<number, { title: string; thumbnail: string | null }[]>;

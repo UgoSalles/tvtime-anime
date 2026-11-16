@@ -1,6 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, fetchStreamingBatch, searchAnime } from './anilist';
-import { loadSeasonEpisodes, mergeStreaming, placeholderEpisodes } from './episodes';
+import { loadSeasonEpisodes, mergeKitsu, mergeStreaming, placeholderEpisodes } from './episodes';
+import { fetchKitsuEpisodes } from './kitsu';
 import { resolveFranchise } from './franchise';
 import type { Franchise, FranchiseSeason } from './types';
 
@@ -72,8 +73,18 @@ export const useFranchiseStreaming = (franchise: Franchise | undefined, enabled 
 export function useEpisodeList(franchise: Franchise | undefined, season: FranchiseSeason | undefined, page: number, enabled = true) {
   const eps = useSeasonEpisodes(season, page, enabled);
   const streaming = useFranchiseStreaming(franchise, enabled);
-  const data = eps.data ? mergeStreaming(eps.data, season ? streaming.data?.[season.anime.id] : undefined) : undefined;
-  return { data, isPlaceholder: eps.isPlaceholderData, thumbsLoading: streaming.isLoading };
+  // Vraies images d'épisode (Kitsu), indépendantes d'AniList et de Jikan.
+  const malId = season?.anime.idMal ?? null;
+  const kitsu = useQuery({
+    queryKey: ['kitsu', malId, page],
+    queryFn: ({ signal }) => fetchKitsuEpisodes(malId!, (page - 1) * 100 + 1, page * 100, signal),
+    enabled: enabled && !!malId,
+    staleTime: 12 * HOUR,
+    retry: 0,
+  });
+  const base = eps.data ? mergeStreaming(eps.data, season ? streaming.data?.[season.anime.id] : undefined) : undefined;
+  const data = base ? mergeKitsu(base, kitsu.data) : undefined;
+  return { data, isPlaceholder: eps.isPlaceholderData, thumbsLoading: kitsu.isLoading };
 }
 
 export const useAiring = (ids: number[]) =>

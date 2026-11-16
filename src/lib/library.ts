@@ -60,6 +60,24 @@ export function computeShowState(follow: FollowRow, franchise: Franchise | undef
   };
 }
 
+/** Rangement des séries suivies. */
+export type Bucket = 'watching' | 'notstarted' | 'stale' | 'later' | 'completed' | 'dropped';
+/** Au-delà de ce délai sans épisode coché, une série en cours passe seule dans « Pas regardé depuis un moment ». */
+export const STALE_DAYS = 30;
+
+/**
+ * Où ranger une série : arrêtée, terminée, « à regarder plus tard » (choix manuel), pas commencée,
+ * pas regardée depuis un moment (automatique), sinon en cours.
+ */
+export function bucketOf(s: ShowState, now = Date.now()): Bucket {
+  if (s.follow.status === 'dropped') return 'dropped';
+  if (s.completed) return 'completed';
+  if (s.follow.later) return 'later';
+  if (!s.started) return 'notstarted';
+  const last = s.follow.lastWatchedAt ?? s.follow.addedAt;
+  return now - last > STALE_DAYS * 86_400_000 ? 'stale' : 'watching';
+}
+
 /** Calcul de la bibliothèque : suivis (Dexie, live) + franchises (cache AniList) + progression. */
 function useLibraryCompute() {
   const follows = useFollows();

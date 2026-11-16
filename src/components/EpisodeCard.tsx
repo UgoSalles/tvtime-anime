@@ -87,7 +87,7 @@ export function EpisodeCard({
             {ep.absolute ? ` (E${ep.absolute})` : ''}
           </span>
           {ep.behind ? <span className="text-episode-count text-ink-3">+{ep.behind}</span> : null}
-          {ep.premiere ? <Badge kind="premiere">Premiere</Badge> : null}
+          {ep.premiere ? <Badge kind="premiere">Première</Badge> : null}
           {ep.isNew ? <Badge kind="new">Nouveau</Badge> : null}
         </div>
         <div

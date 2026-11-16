@@ -13,13 +13,13 @@ import { stripSeasonSuffix, useTitle } from '../lib/titles';
  * Note, émotion et personnage préféré sont enregistrés localement. Les pourcentages communautaires
  * de a.jpeg n'ont pas de source : ils reviendront avec le social (phase 6). Commentaires : phase 6.
  */
-const RATINGS = ['Bad', 'Ok', 'Good', 'Great', 'Wow'];
+const RATINGS = ['Mauvais', 'Moyen', 'Bien', 'Super', 'Waouh'];
 const EMOTIONS = [
-  { id: 'shocked', emoji: '😱', label: 'Shocked' },
-  { id: 'frustrated', emoji: '😤', label: 'Frustrated' },
-  { id: 'sad', emoji: '😭', label: 'Sad' },
-  { id: 'reflective', emoji: '🤔', label: 'Reflective' },
-  { id: 'funny', emoji: '😂', label: 'Funny' },
+  { id: 'shocked', emoji: '😱', label: 'Choqué' },
+  { id: 'frustrated', emoji: '😤', label: 'Frustré' },
+  { id: 'sad', emoji: '😭', label: 'Triste' },
+  { id: 'reflective', emoji: '🤔', label: 'Pensif' },
+  { id: 'funny', emoji: '😂', label: 'Drôle' },
 ];
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -54,7 +54,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
     <div className="flex h-full flex-col bg-surface">
       <div className="scroll-y min-h-0 flex-1 pb-10">
         <div className="relative h-[240px]">
-          <Poster title="" src={info?.thumbnail ?? season?.anime.banner ?? season?.anime.coverLarge} color={season?.anime.color ?? '#333'} showTitle={false} className="absolute inset-0" />
+          <Poster title="" src={info?.thumbnailLarge ?? info?.thumbnail} color={season?.anime.color ?? '#333'} showTitle={false} className="absolute inset-0" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0) 35%, rgba(0,0,0,0.75))' }} />
           <div className="absolute inset-x-0 top-0 flex items-center justify-between px-3 text-white" style={{ paddingTop: 'calc(var(--safe-top) + 10px)' }}>
             <button aria-label="Fermer" onClick={onBack} className="grid h-9 w-9 place-items-center"><IconChevronDown size={26} /></button>

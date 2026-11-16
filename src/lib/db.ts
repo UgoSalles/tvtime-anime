@@ -22,6 +22,8 @@ export interface FollowRow {
   favorite: boolean;
   /** Dernier épisode coché (tri de la watchlist). */
   lastWatchedAt: number | null;
+  /** « À regarder plus tard » : rangé à la main par l'utilisateur ; cocher un épisode le retire. */
+  later?: boolean;
 }
 
 /** Un épisode vu (clé : saison AniList + numéro dans la saison). */

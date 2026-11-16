@@ -7,6 +7,7 @@ import { useBrowse, useDiscover, useSearch } from '../api/hooks';
 import type { Anime } from '../api/types';
 import { useDebounced } from '../lib/useDebounced';
 import { useTitle } from '../lib/titles';
+import { genreFr } from '../lib/genres';
 
 const FORMAT_LABEL: Record<string, string> = { TV: 'Série', TV_SHORT: 'Série courte', ONA: 'ONA', MOVIE: 'Film', OVA: 'OVA', SPECIAL: 'Spécial', MUSIC: 'Clip' };
 
@@ -75,7 +76,7 @@ function BrowseView({ onOpen, onBack }: { onOpen: (id: number) => void; onBack: 
               onClick={() => setGenre(g)}
               className={`h-8 shrink-0 rounded-full px-3 text-[12px] font-bold uppercase tracking-wide ${genre === g ? 'bg-yellow text-black' : 'bg-chip text-chip-text'}`}
             >
-              {g ?? 'Tous'}
+              {g ? genreFr(g) : 'Tous'}
             </button>
           ))}
         </div>
