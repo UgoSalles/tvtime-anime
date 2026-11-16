@@ -19,7 +19,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { networkMode: 
 // Demande un stockage « persistant » pour que le navigateur n'efface pas les suivis (ignoré sans effet par iOS).
 navigator.storage?.persist?.().catch(() => undefined);
 // Anciennes versions du cache de franchises (parcours tronqué à 6 saisons) : on les jette.
-import('./lib/db').then(({ db }) => db.apiCache.where('key').startsWith('franchise3:').delete()).catch(() => undefined);
+import('./lib/db').then(({ db }) => db.apiCache.filter((r) => /^franchise[345]:/.test(r.key)).delete()).catch(() => undefined);
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -45,7 +45,7 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   watched: WatchMap;
 }) {
   const [page, setPage] = useState(1);
-  const q = useEpisodeList(franchise, season, page);
+  const q = useEpisodeList(season, page);
   const data = q.data;
   // Images d'épisode réelles uniquement : pas d'image de remplacement. Si aucun épisode n'en a, on n'affiche que le numéro.
   const withImages = !!data?.episodes.some((e) => e.thumbnail) || q.thumbsLoading;
@@ -124,7 +124,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
     for (const s of franchise.seasons) for (const e of airedOf(s)) if (!watched.has(epKey(e.seasonId, e.episode))) return { season: s, episode: e.episode };
     return null;
   }, [franchise, watched]);
-  const nextEps = useEpisodeList(franchise, next?.season, Math.ceil((next?.episode ?? 1) / 100), !!next);
+  const nextEps = useEpisodeList(next?.season, Math.ceil((next?.episode ?? 1) / 100), !!next);
   const nextInfo = nextEps.data?.episodes.find((e) => e.number === next?.episode);
 
   const everything = allAired(franchise);

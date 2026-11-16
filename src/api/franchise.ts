@@ -33,7 +33,32 @@ export function airedCount(a: Anime): number | null {
   return a.episodes;
 }
 
-export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchise {
+/**
+ * Séries que TV Time (TVDB) présente comme des séries À PART alors qu'AniList les relie en SEQUEL.
+ * Clé : id AniList de la première saison de la série séparée (le lien avec sa préquelle est ignoré).
+ */
+export const SEPARATE_SHOWS = new Set<number>([
+  97938, // BORUTO: NARUTO NEXT GENERATIONS (suite de Naruto Shippuden)
+]);
+
+/** Ne garde que les entrées reliées à `rootId` par des PREQUEL/SEQUEL, sans franchir les coupures de SEPARATE_SHOWS. */
+function separate(rootId: number, nodes: FranchiseNode[]): FranchiseNode[] {
+  if (!nodes.some((n) => SEPARATE_SHOWS.has(n.anime.id))) return nodes;
+  const known = new Set(nodes.map((n) => n.anime.id));
+  const adj = new Map<number, Set<number>>();
+  const link = (a: number, b: number) => {
+    (adj.get(a) ?? adj.set(a, new Set()).get(a)!).add(b);
+    (adj.get(b) ?? adj.set(b, new Set()).get(b)!).add(a);
+  };
+  for (const n of nodes) if (!SEPARATE_SHOWS.has(n.anime.id)) for (const p of n.prequels) if (known.has(p)) link(n.anime.id, p);
+  const comp = new Set([rootId]);
+  const stack = [rootId];
+  while (stack.length) for (const x of adj.get(stack.pop()!) ?? []) if (!comp.has(x)) (comp.add(x), stack.push(x));
+  return nodes.filter((n) => comp.has(n.anime.id));
+}
+
+export function buildFranchise(rootId: number, allNodes: FranchiseNode[]): Franchise {
+  const nodes = separate(rootId, allNodes);
   const animes = nodes.map((n) => n.anime);
   let seasonsRaw = animes
     .filter((a) => a.format && SEASON_FORMATS.has(a.format))
@@ -69,7 +94,7 @@ export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchis
 }
 
 export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Franchise> {
-  return cachedFetch(`franchise5:${id}`, TTL.franchise, async () => {
+  return cachedFetch(`franchise6:${id}`, TTL.franchise, async () => {
     const known = new Map<number, FranchiseNode>();
     const seen = new Set<number>([id]);
     let frontier = [id];
@@ -90,7 +115,7 @@ export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Fran
     // La même franchise répond pour chacun de ses membres (évite de refaire le parcours).
     const now = Date.now();
     db.apiCache
-      .bulkPut(franchise.ids.map((m) => ({ key: `franchise5:${m}`, value: franchise, fetchedAt: now })))
+      .bulkPut(franchise.ids.map((m) => ({ key: `franchise6:${m}`, value: franchise, fetchedAt: now })))
       .catch(() => undefined);
     return franchise;
   });

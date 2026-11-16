@@ -3,7 +3,7 @@ import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, se
 import { loadSeasonEpisodes, mergeKitsu, placeholderEpisodes } from './episodes';
 import { fetchKitsuEpisodes } from './kitsu';
 import { resolveFranchise } from './franchise';
-import type { Franchise, FranchiseSeason } from './types';
+import type { FranchiseSeason } from './types';
 
 const HOUR = 3_600_000;
 
@@ -61,7 +61,7 @@ export const useSeasonEpisodes = (season: FranchiseSeason | undefined, page: num
  * Liste d'épisodes complète : numéros instantanés → titres/dates (Jikan) → titres de secours et images (Kitsu), chaque
  * source arrivant indépendamment.
  */
-export function useEpisodeList(franchise: Franchise | undefined, season: FranchiseSeason | undefined, page: number, enabled = true) {
+export function useEpisodeList(season: FranchiseSeason | undefined, page: number, enabled = true) {
   const eps = useSeasonEpisodes(season, page, enabled);
   // Vraies images d'épisode (Kitsu), indépendantes d'AniList et de Jikan.
   const malId = season?.anime.idMal ?? null;

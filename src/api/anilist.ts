@@ -1,5 +1,4 @@
 import { cachedFetch, TTL } from './cache';
-import { db, type CacheRow } from '../lib/db';
 import { fetchJsonWithRetry, RateLimitedQueue } from './queue';
 import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, Titles } from './types';
 
@@ -198,6 +197,8 @@ export interface FranchiseNode {
   links: number[];
   /** Préquelles DIRECTES (type ANIME) : sert à rattacher un « Part 2 » à sa saison. */
   prequels: number[];
+  /** Suites DIRECTES (type ANIME) : sert à vérifier qu'une franchise est fermée (aucun voisin inconnu). */
+  sequels: number[];
 }
 
 interface RelEdge {
@@ -240,7 +241,8 @@ export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): 
     collectLinks(m.relations?.edges, links);
     links.delete(m.id);
     const prequels = (m.relations?.edges ?? []).filter((e) => e.relationType === 'PREQUEL' && e.node.type === 'ANIME').map((e) => e.node.id);
-    return { anime: normalize(m), links: [...links], prequels };
+    const sequels = (m.relations?.edges ?? []).filter((e) => e.relationType === 'SEQUEL' && e.node.type === 'ANIME').map((e) => e.node.id);
+    return { anime: normalize(m), links: [...links], prequels, sequels };
   });
 }
 

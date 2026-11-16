@@ -35,7 +35,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
   const t = useTitle();
   const franchise = useFranchise(showId);
   const season = franchise.data?.seasons.find((s) => s.anime.id === seasonId);
-  const eps = useEpisodeList(franchise.data, season, Math.ceil(episode / 100));
+  const eps = useEpisodeList(season, Math.ceil(episode / 100));
   const info = eps.data?.episodes.find((e) => e.number === episode);
   const root = franchise.data?.seasons[0]?.anime;
   const follow = useFollowOf(showId);
