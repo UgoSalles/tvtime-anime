@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { IconChevronDown, IconChevronRight, IconTv } from '../components/Icons';
 import { Poster } from '../components/Poster';
-import { PosterRow } from '../components/PosterRow';
+import { PosterRow, QuickFollow } from '../components/PosterRow';
 import { useBrowse, useDiscover, useSearch } from '../api/hooks';
 import type { Anime } from '../api/types';
 import { useDebounced } from '../lib/useDebounced';
@@ -20,8 +20,8 @@ function SearchResults({ term, onOpen }: { term: string; onOpen: (id: number) =>
   return (
     <ul className="px-page pt-2">
       {items.map((a) => (
-        <li key={a.id}>
-          <button onClick={() => onOpen(a.id)} className="flex w-full items-center gap-3 border-b border-divider py-3 text-left">
+        <li key={a.id} className="flex items-center gap-3 border-b border-divider">
+          <button onClick={() => onOpen(a.id)} className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left">
             <Poster title={t(a.title)} src={a.coverLarge} color={a.color} showTitle={false} className="shrink-0 rounded-poster" style={{ width: 56, height: 84 }} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-bold text-ink">{t(a.title)}</span>
@@ -31,6 +31,7 @@ function SearchResults({ term, onOpen }: { term: string; onOpen: (id: number) =>
             </span>
             {a.averageScore ? <span className="text-[13px] font-bold text-ink-2">{(a.averageScore / 10).toFixed(1)}</span> : null}
           </button>
+          <QuickFollow animeId={a.id} />
         </li>
       ))}
     </ul>
@@ -82,9 +83,12 @@ function BrowseView({ onOpen, onBack }: { onOpen: (id: number) => void; onBack: 
       <div className="scroll-y min-h-0 flex-1 px-page pt-3" style={{ paddingBottom: 'calc(var(--tabbar-h) + var(--safe-bottom) + 16px)' }}>
         <div className="grid grid-cols-3 gap-2">
           {items.map((a) => (
-            <button key={a.id} onClick={() => onOpen(a.id)} aria-label={t(a.title)}>
-              <Poster title={t(a.title)} src={a.coverLarge} color={a.color} className="aspect-[2/3] w-full rounded-poster" />
-            </button>
+            <div key={a.id} className="relative">
+              <button onClick={() => onOpen(a.id)} aria-label={t(a.title)} className="block w-full">
+                <Poster title={t(a.title)} src={a.coverLarge} color={a.color} className="aspect-[2/3] w-full rounded-poster" />
+              </button>
+              <QuickFollow animeId={a.id} className="absolute right-1.5 top-1.5" />
+            </div>
           ))}
           {q.isLoading && Array.from({ length: 9 }, (_, i) => <div key={i} className="aspect-[2/3] animate-pulse rounded-poster bg-chip" />)}
         </div>

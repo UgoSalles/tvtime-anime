@@ -10,6 +10,10 @@ import { EPISODES_PER_PAGE } from '../api/episodes';
 import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { layout } from '../theme';
+import { useFollowOf, useListsOfShow, useLists, useWatchedMap } from '../db/hooks';
+import { addToList, allAired, airedOf, createList, ensureFollow, epKey, markEpisodes, removeFromList, setDropped, toggleFavorite, unfollow } from '../db/repo';
+import { toggleEpisode } from '../db/actions';
+import { openActions, useSheet } from '../store/sheet';
 
 type Tab = 'about' | 'episodes';
 
@@ -26,11 +30,11 @@ const FORMAT: Record<string, string> = { TV: 'Série TV', TV_SHORT: 'Série cour
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null);
 const stripHtml = (s: string) => s.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
 
-function SeasonEpisodes({ season, onOpenEpisode, watched, onToggle }: {
+function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   season: FranchiseSeason;
+  franchise: Franchise;
   onOpenEpisode: (seasonId: number, ep: number) => void;
-  watched: Set<number>;
-  onToggle: (n: number) => void;
+  watched: Map<string, number>;
 }) {
   const [page, setPage] = useState(1);
   const q = useSeasonEpisodes(season, page);
@@ -60,37 +64,44 @@ function SeasonEpisodes({ season, onOpenEpisode, watched, onToggle }: {
               {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null].filter(Boolean).join(' · ')}
             </span>
           </span>
-          <CheckButton checked={watched.has(e.number)} onToggle={() => onToggle(e.number)} size={30} />
+          <div className={e.number > (season.aired ?? 0) ? 'opacity-40' : ''}>
+            <CheckButton
+              checked={watched.has(epKey(season.anime.id, e.number))}
+              onToggle={() => e.number <= (season.aired ?? 0) && toggleEpisode(franchise, season.anime.id, e.number, watched)}
+              size={30}
+            />
+          </div>
         </div>
       ))}
     </div>
   );
 }
 
-function EpisodesTab({ franchise, onOpenEpisode }: { franchise: Franchise; onOpenEpisode: (seasonId: number, ep: number) => void }) {
+function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchise; watched: Map<string, number>; onOpenEpisode: (seasonId: number, ep: number) => void }) {
   const [open, setOpen] = useState<number | null>(null);
-  // Cases cochées : état local jusqu'à la phase 4 (Dexie).
-  const [watched, setWatched] = useState<Record<number, Set<number>>>({});
-  const toggle = (sid: number, n: number) =>
-    setWatched((w) => {
-      const s = new Set(w[sid] ?? []);
-      s.has(n) ? s.delete(n) : s.add(n);
-      return { ...w, [sid]: s };
-    });
-  const first = franchise.seasons[0];
   const t = useTitle();
-  const next = useSeasonEpisodes(first, 1);
+
+  // Prochain épisode : premier diffusé et non vu.
+  const next = useMemo(() => {
+    for (const s of franchise.seasons) for (const e of airedOf(s)) if (!watched.has(epKey(e.seasonId, e.episode))) return { season: s, episode: e.episode };
+    return null;
+  }, [franchise, watched]);
+  const nextEps = useSeasonEpisodes(next?.season, Math.ceil((next?.episode ?? 1) / 100));
+  const nextInfo = nextEps.data?.episodes.find((e) => e.number === next?.episode);
+
+  const everything = allAired(franchise);
+  const allDone = everything.length > 0 && everything.every((e) => watched.has(epKey(e.seasonId, e.episode)));
 
   return (
     <div className="pb-10">
-      {first && (
+      {next && (
         <>
           <div className="py-4 text-center text-section-chip uppercase text-ink-2">Watch next</div>
           <div className="px-page">
-            <button onClick={() => onOpenEpisode(first.anime.id, 1)} className="block w-full text-left">
-              <Poster title="" src={next.data?.episodes[0]?.thumbnail ?? first.anime.banner} color={first.anime.color} showTitle={false} className="h-[88px] w-full rounded-card">
+            <button onClick={() => onOpenEpisode(next.season.anime.id, next.episode)} className="block w-full text-left">
+              <Poster title="" src={nextInfo?.thumbnail ?? next.season.anime.banner ?? next.season.anime.coverLarge} color={next.season.anime.color} showTitle={false} className="h-[88px] w-full rounded-card">
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-[12px] font-bold text-white">
-                  S01 | E01 · {next.data?.episodes[0]?.title ?? 'Épisode 1'}
+                  S{String(next.season.number).padStart(2, '0')} | E{String(next.episode).padStart(2, '0')} · {nextInfo?.title ?? `Épisode ${next.episode}`}
                 </span>
               </Poster>
             </button>
@@ -99,35 +110,28 @@ function EpisodesTab({ franchise, onOpenEpisode }: { franchise: Franchise; onOpe
       )}
       <div className="flex items-center justify-between px-page py-4">
         <span className="text-section-chip uppercase text-ink-2">Tous les épisodes</span>
-        <CheckButton checked={false} onToggle={() => undefined} size={26} />
+        <CheckButton checked={allDone} onToggle={() => markEpisodes(franchise, everything, !allDone)} size={26} />
       </div>
       <div className="flex flex-col gap-2.5 px-page">
         {franchise.seasons.map((s) => {
-          const total = s.anime.episodes ?? s.aired ?? 0;
-          const done = watched[s.anime.id]?.size ?? 0;
+          const aired = s.aired ?? 0;
+          const total = s.anime.episodes ?? aired;
+          const done = airedOf(s).filter((e) => watched.has(epKey(e.seasonId, e.episode))).length;
           const ratio = total ? done / total : 0;
+          const complete = aired > 0 && done === aired;
           const isOpen = open === s.anime.id;
           return (
             <div key={s.anime.id} className="shadow-card overflow-hidden rounded-card bg-surface">
               <div className="flex h-[62px] items-center px-4" role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : s.anime.id)}>
                 <span className="text-[20px] font-bold text-ink">Saison {s.number}</span>
                 <IconChevronDown size={16} className={`ml-2 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                <span className="ml-auto mr-3 text-[14px] font-medium text-ink-3">
-                  {done}/{total || '?'}
-                </span>
-                <CheckButton checked={total > 0 && done === total} onToggle={() => undefined} size={34} />
+                <span className="ml-auto mr-3 text-[14px] font-medium text-ink-3">{done}/{total || '?'}</span>
+                <CheckButton checked={complete} onToggle={() => aired > 0 && markEpisodes(franchise, airedOf(s), !complete)} size={34} />
               </div>
               <div className="h-1 w-full bg-progress-track">
                 <motion.div className="h-full bg-green" initial={false} animate={{ width: `${ratio * 100}%` }} transition={{ duration: 0.3 }} />
               </div>
-              {isOpen && (
-                <SeasonEpisodes
-                  season={s}
-                  onOpenEpisode={onOpenEpisode}
-                  watched={watched[s.anime.id] ?? new Set()}
-                  onToggle={(n) => toggle(s.anime.id, n)}
-                />
-              )}
+              {isOpen && <SeasonEpisodes season={s} franchise={franchise} onOpenEpisode={onOpenEpisode} watched={watched} />}
             </div>
           );
         })}
@@ -200,6 +204,51 @@ function AboutTab({ detail, onOpenShow }: { detail: AnimeDetail; onOpenShow: (id
   );
 }
 
+
+/** Menu ⋮ de la fiche : favori, listes, tout marquer, arrêter, ne plus suivre. */
+function openMenu(f: Franchise, follow: Awaited<ReturnType<typeof ensureFollow>> | null, lists: { id?: number; name: string }[], inLists: Set<number>) {
+  const aired = allAired(f);
+  const actions = [];
+  if (follow) {
+    actions.push({ label: follow.favorite ? 'Retirer des favoris' : 'Ajouter aux favoris', onClick: () => toggleFavorite(f.rootId) });
+  }
+  actions.push({
+    label: 'Ajouter à une liste…',
+    onClick: () =>
+      openActions('Listes', [
+        ...lists.map((l) => ({
+          label: `${inLists.has(l.id!) ? '✓ ' : ''}${l.name}`,
+          onClick: async () => {
+            await ensureFollow(f);
+            return inLists.has(l.id!) ? removeFromList(l.id!, f.rootId) : addToList(l.id!, f.rootId);
+          },
+        })),
+        {
+          label: 'Nouvelle liste…',
+          onClick: () =>
+            useSheet.getState().open({
+              kind: 'prompt',
+              title: 'Nouvelle liste',
+              placeholder: 'Nom de la liste',
+              submitLabel: 'Créer',
+              onSubmit: async (name) => {
+                const id = (await createList(name)) as number;
+                await ensureFollow(f);
+                await addToList(id, f.rootId);
+              },
+            }),
+        },
+      ]),
+  });
+  actions.push({ label: 'Tout marquer comme vu', onClick: () => markEpisodes(f, aired, true) });
+  actions.push({ label: 'Tout démarquer', onClick: () => markEpisodes(f, aired, false), destructive: true });
+  if (follow) {
+    actions.push({ label: follow.status === 'dropped' ? 'Reprendre le suivi' : 'Arrêter de regarder', onClick: () => setDropped(f.rootId, follow.status !== 'dropped') });
+    actions.push({ label: 'Ne plus suivre', onClick: () => unfollow(f.rootId), destructive: true });
+  }
+  openActions(undefined, actions);
+}
+
 /**
  * Fiche série (franchise = une série, plusieurs saisons). Structure d'après q.jpeg / c.jpeg / m.jpeg
  * (versions anciennes). L'onglet « À propos » n'est sur aucune capture (SPEC §4.5) : construit à
@@ -214,6 +263,10 @@ export function ShowScreen({ showId, onBack, onOpenShow, onOpenEpisode }: {
   const t = useTitle();
   const [tab, setTab] = useState<Tab>('episodes');
   const franchise = useFranchise(showId);
+  const follow = useFollowOf(showId);
+  const watched = useWatchedMap(follow?.showId ?? franchise.data?.rootId ?? showId);
+  const lists = useLists();
+  const inLists = useListsOfShow(franchise.data?.rootId);
   const root = franchise.data?.seasons[0]?.anime;
   const detail = useAnimeDetail(root?.id ?? showId);
   const a = detail.data ?? root;
@@ -229,7 +282,7 @@ export function ShowScreen({ showId, onBack, onOpenShow, onOpenEpisode }: {
             <button aria-label="Retour" onClick={onBack} className="grid h-9 w-9 place-items-center"><IconChevronDown size={26} /></button>
             <div className="flex items-center gap-1">
               <button aria-label="Partager" className="grid h-9 w-9 place-items-center"><IconShare size={22} /></button>
-              <button aria-label="Plus" className="grid h-9 w-9 place-items-center"><IconMore size={22} /></button>
+              <button aria-label="Plus" disabled={!franchise.data} onClick={() => franchise.data && openMenu(franchise.data, follow ?? null, lists ?? [], new Set((inLists ?? []).map((i) => i.listId)))} className="grid h-9 w-9 place-items-center"><IconMore size={22} /></button>
             </div>
           </div>
           <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 px-page pb-4 text-white">
@@ -242,7 +295,13 @@ export function ShowScreen({ showId, onBack, onOpenShow, onOpenEpisode }: {
                 </p>
               )}
             </div>
-            <span className="inline-flex h-[30px] shrink-0 items-center rounded-card bg-yellow px-3 text-[12px] font-bold text-black">+ Suivre</span>
+            <button
+              disabled={!franchise.data}
+              onClick={async () => (follow ? unfollow(follow.showId) : franchise.data && (await ensureFollow(franchise.data)))}
+              className={`inline-flex h-[30px] shrink-0 items-center rounded-card px-3 text-[12px] font-bold ${follow ? 'bg-green text-white' : 'bg-yellow text-black'}`}
+            >
+              {follow ? '✓ Suivi' : '+ Suivre'}
+            </button>
           </div>
         </div>
 
@@ -257,7 +316,7 @@ export function ShowScreen({ showId, onBack, onOpenShow, onOpenEpisode }: {
         ) : tab === 'about' ? (
           detail.data ? <AboutTab detail={detail.data} onOpenShow={onOpenShow} /> : <p className="px-page py-10 text-center text-[13px] text-ink-3">Chargement…</p>
         ) : franchise.data ? (
-          <EpisodesTab franchise={franchise.data} onOpenEpisode={onOpenEpisode} />
+          <EpisodesTab franchise={franchise.data} watched={watched ?? new Map()} onOpenEpisode={onOpenEpisode} />
         ) : (
           <div className="space-y-2.5 px-page py-6">{Array.from({ length: 3 }, (_, i) => <div key={i} className="h-[66px] animate-pulse rounded-card bg-surface" />)}</div>
         )}

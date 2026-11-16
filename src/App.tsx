@@ -8,6 +8,7 @@ import { DiscoverScreen } from './screens/DiscoverScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { ShowScreen } from './screens/ShowScreen';
 import { EpisodeScreen } from './screens/EpisodeScreen';
+import { SheetHost } from './components/Sheet';
 
 /**
  * Navigation : les 3 onglets sont montés en permanence (scroll conservé) ; fiche série
@@ -58,6 +59,7 @@ export function App() {
           </StackLayer>
         )}
       </AnimatePresence>
+      <SheetHost />
     </div>
   );
 }

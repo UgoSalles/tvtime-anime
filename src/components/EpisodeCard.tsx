@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { CheckButton } from './CheckButton';
 import { Badge, ShowPill } from './Chips';
 import { Poster } from './Poster';
@@ -35,13 +36,34 @@ export function EpisodeCard({
   compact = false,
   onOpenShow,
   onOpenEpisode,
+  onCheck,
+  checked,
+  locked = false,
 }: {
   ep: EpisodeCardModel;
   compact?: boolean;
+  /** Appelé quand l'utilisateur coche (Watchlist : après l'animation de coche). */
+  onCheck: () => void;
+  /** Mode contrôlé (À venir) : état coché issu de la base ; décocher est alors possible. */
+  checked?: boolean;
+  /** Épisode pas encore diffusé : la coche « tremble » au lieu de valider. */
+  locked?: boolean;
   onOpenShow: (id: number) => void;
   onOpenEpisode: (showId: number, seasonId: number, episode: number) => void;
 }) {
-  const [done, setDone] = useState(false);
+  const controlled = checked !== undefined;
+  const [done, setDone] = useState(checked ?? false);
+  const [shake, setShake] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => setDone(checked ?? false), [checked, ep.key]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const toggle = () => {
+    if (locked) return setShake((n) => n + 1);
+    if (controlled) return onCheck();
+    if (done) return;
+    setDone(true); // vert d'abord, puis la carte passe à l'épisode suivant
+    timer.current = setTimeout(onCheck, 480);
+  };
   const h = compact ? layout.upcomingCardHeight : layout.episodeCardHeight;
   const pw = compact ? layout.upcomingCardPosterWidth : layout.episodeCardPosterWidth;
   const open = () => onOpenEpisode(ep.showId, ep.seasonId, ep.episode);
@@ -76,7 +98,9 @@ export function EpisodeCard({
         </div>
       </div>
       <div className="absolute right-3 top-1/2 -translate-y-1/2">
-        <CheckButton checked={done} onToggle={() => setDone((d) => !d)} size={compact ? 34 : layout.checkButtonSize} />
+        <motion.div key={shake} animate={shake ? { x: [0, -5, 5, -3, 3, 0] } : undefined} transition={{ duration: 0.3 }}>
+          <CheckButton checked={done} onToggle={toggle} size={compact ? 34 : layout.checkButtonSize} />
+        </motion.div>
       </div>
     </div>
   );

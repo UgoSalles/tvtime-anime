@@ -1,19 +1,48 @@
-import { IconChevronRight, IconPlus } from './Icons';
+import { useState } from 'react';
+import { IconCheck, IconChevronRight, IconPlus } from './Icons';
 import { Poster } from './Poster';
 import type { Anime } from '../api/types';
+import { followAnime, unfollow } from '../db/repo';
+import { useFollowOf } from '../db/hooks';
 import { useTitle } from '../lib/titles';
+
+/** Bouton « + » (ajout rapide) → coche verte une fois suivi. */
+export function QuickFollow({ animeId, className = '' }: { animeId: number; className?: string }) {
+  const follow = useFollowOf(animeId);
+  const [busy, setBusy] = useState(false);
+  const followed = !!follow;
+  return (
+    <button
+      type="button"
+      aria-label={followed ? 'Ne plus suivre' : 'Suivre'}
+      disabled={busy || follow === undefined}
+      onClick={async (e) => {
+        e.stopPropagation();
+        setBusy(true);
+        try {
+          if (follow) await unfollow(follow.showId);
+          else await followAnime(animeId);
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className={`grid h-6 w-6 place-items-center rounded-[4px] border-2 text-white ${followed ? 'border-green bg-green' : 'border-white/90 bg-black/30'} ${busy ? 'animate-pulse' : ''} ${className}`}
+    >
+      {followed ? <IconCheck size={14} /> : <IconPlus size={14} />}
+    </button>
+  );
+}
 
 export function PosterTile({ anime, onOpen, width = 112, height = 168 }: { anime: Anime; onOpen: (id: number) => void; width?: number; height?: number }) {
   const t = useTitle();
   const name = t(anime.title);
   return (
-    <button onClick={() => onOpen(anime.id)} className="shrink-0 text-left" aria-label={name}>
-      <Poster title={name} src={anime.coverLarge} color={anime.color} className="rounded-poster" style={{ width, height }}>
-        <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-[4px] border-2 border-white/90 bg-black/30 text-white">
-          <IconPlus size={14} />
-        </span>
-      </Poster>
-    </button>
+    <div className="relative shrink-0" style={{ width, height }}>
+      <button onClick={() => onOpen(anime.id)} className="block text-left" aria-label={name}>
+        <Poster title={name} src={anime.coverLarge} color={anime.color} className="rounded-poster" style={{ width, height }} />
+      </button>
+      <QuickFollow animeId={anime.id} className="absolute right-1.5 top-1.5" />
+    </div>
   );
 }
 
