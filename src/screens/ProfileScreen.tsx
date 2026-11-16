@@ -1,6 +1,9 @@
+import { useMatch, useNavigate } from 'react-router-dom';
 import { IconPlus } from '../components/Icons';
+import { SettingsView } from './SettingsView';
 import { Poster } from '../components/Poster';
-import { profileShows } from '../data/mock';
+import { useDiscover } from '../api/hooks';
+import { useTitle } from '../lib/titles';
 
 function StatCard({ label, children, width }: { label: string; children: React.ReactNode; width: number }) {
   return (
@@ -23,13 +26,23 @@ const Stat = ({ n, unit }: { n: string; unit: string }) => (
  * Seule la partie visible sur s.jpeg est reproduite. L'en-tête du profil (avatar, pseudo,
  * réglages) et les sections suivantes ne sont pas couverts par les captures (SPEC §4.7).
  */
-export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: string) => void }) {
+export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: number) => void }) {
+  const t = useTitle();
+  const navigate = useNavigate();
+  const settings = useMatch('/profil/reglages');
+  // Démo (phase 3) : les « séries » du profil viennent des tendances ; phase 4 : les suivis réels.
+  const profileShows = (useDiscover().data?.trending ?? []).slice(0, 6);
+  if (settings) return <SettingsView onBack={() => navigate(-1)} />;
   return (
     <div className="flex h-full flex-col bg-surface">
       <div
         className="scroll-y min-h-0 flex-1"
         style={{ paddingTop: 'calc(var(--safe-top) + 16px)', paddingBottom: 'calc(var(--tabbar-h) + var(--safe-bottom) + 16px)' }}
       >
+        {/* Accès aux réglages : emplacement provisoire (l'en-tête du profil n'est pas sur les captures). */}
+        <div className="flex justify-end px-page">
+          <button onClick={() => navigate('/profil/reglages')} className="h-8 text-[12px] font-bold uppercase text-blue">Réglages</button>
+        </div>
         <div className="scroll-x flex gap-3 px-page pb-3 pt-1">
           <StatCard label="Temps passé à regarder" width={258}>
             <Stat n="01" unit="Mois" />
@@ -50,7 +63,7 @@ export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: string) => void
           <div className="scroll-x mt-3 flex gap-3 px-page">
             {profileShows.map((s) => (
               <button key={s.id} onClick={() => onOpenShow(s.id)} className="shrink-0">
-                <Poster title={s.title} hue={s.hue} className="rounded-poster" style={{ width: 158, height: 236 }} />
+                <Poster title={t(s.title)} src={s.coverLarge} color={s.color} showTitle={false} className="rounded-poster" style={{ width: 158, height: 236 }} />
               </button>
             ))}
           </div>

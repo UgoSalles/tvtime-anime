@@ -2,10 +2,29 @@ import { useState } from 'react';
 import { CheckButton } from './CheckButton';
 import { Badge, ShowPill } from './Chips';
 import { Poster } from './Poster';
-import type { MockEpisode } from '../data/mock';
 import { layout } from '../theme';
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Modèle d'affichage d'une carte d'épisode (indépendant de la source de données). */
+export interface EpisodeCardModel {
+  key: string;
+  /** Id AniList de la série (n'importe quelle saison de la franchise). */
+  showId: number;
+  /** Id AniList de la saison de l'épisode. */
+  seasonId: number;
+  showTitle: string;
+  poster: string | null;
+  color: string | null;
+  season: number;
+  episode: number;
+  /** « (E151) » — affiché seulement si la franchise a plusieurs saisons. */
+  absolute?: number;
+  behind?: number;
+  premiere?: boolean;
+  isNew?: boolean;
+  title: string | null;
+}
 
 /**
  * Carte d'épisode. `compact` = variante « À venir » (qx.jpeg, 80 pt) ;
@@ -17,30 +36,28 @@ export function EpisodeCard({
   onOpenShow,
   onOpenEpisode,
 }: {
-  ep: MockEpisode;
+  ep: EpisodeCardModel;
   compact?: boolean;
-  onOpenShow: (id: string) => void;
-  onOpenEpisode: (showId: string, epId: string) => void;
+  onOpenShow: (id: number) => void;
+  onOpenEpisode: (showId: number, seasonId: number, episode: number) => void;
 }) {
   const [done, setDone] = useState(false);
   const h = compact ? layout.upcomingCardHeight : layout.episodeCardHeight;
   const pw = compact ? layout.upcomingCardPosterWidth : layout.episodeCardPosterWidth;
+  const open = () => onOpenEpisode(ep.showId, ep.seasonId, ep.episode);
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onOpenEpisode(ep.show.id, ep.id)}
-      onKeyDown={(e) => e.key === 'Enter' && onOpenEpisode(ep.show.id, ep.id)}
+      onClick={open}
+      onKeyDown={(e) => e.key === 'Enter' && open()}
       className="shadow-card relative flex overflow-hidden rounded-card bg-surface"
       style={{ height: h }}
     >
-      <Poster title={ep.show.title} hue={ep.show.hue} className="shrink-0" style={{ width: pw }} />
-      <div
-        className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden pl-3.5"
-        style={{ gap: compact ? 3 : 6 }}
-      >
+      <Poster title={ep.showTitle} src={ep.poster} color={ep.color} showTitle={false} className="shrink-0" style={{ width: pw }} />
+      <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden pl-3.5" style={{ gap: compact ? 3 : 6 }}>
         <div>
-          <ShowPill name={ep.show.title} onClick={() => onOpenShow(ep.show.id)} />
+          <ShowPill name={ep.showTitle} onClick={() => onOpenShow(ep.showId)} />
         </div>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-episode-code text-ink" style={compact ? { fontSize: 15 } : undefined}>
@@ -55,7 +72,7 @@ export function EpisodeCard({
           className={`truncate pr-[60px] text-episode-title text-ink ${compact ? '!font-semibold' : ''}`}
           style={compact ? { fontSize: 14 } : undefined}
         >
-          {ep.title}
+          {ep.title ?? `Épisode ${ep.episode}`}
         </div>
       </div>
       <div className="absolute right-3 top-1/2 -translate-y-1/2">

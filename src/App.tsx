@@ -18,6 +18,8 @@ export function App() {
   const navigate = useNavigate();
   const showMatch = matchPath({ path: '/serie/:showId', end: false }, pathname);
   const epMatch = matchPath('/serie/:showId/episode/:epId', pathname);
+  const showId = Number(showMatch?.params.showId);
+  const [epSeason, epNum] = (epMatch?.params.epId ?? '').split('-').map(Number);
 
   // Onglet visible derrière une fiche : le dernier onglet réel (la TabBar ne saute pas).
   const tabRef = useRef<'shows' | 'discover' | 'profile'>('shows');
@@ -25,8 +27,8 @@ export function App() {
     tabRef.current = pathname.startsWith('/decouvrir') ? 'discover' : pathname.startsWith('/profil') ? 'profile' : 'shows';
   }
   const tab = tabRef.current;
-  const openShow = (id: string) => navigate(`/serie/${id}`);
-  const openEpisode = (showId: string, epId: string) => navigate(`/serie/${showId}/episode/${epId}`);
+  const openShow = (id: number) => navigate(`/serie/${id}`);
+  const openEpisode = (sid: number, seasonId: number, ep: number) => navigate(`/serie/${sid}/episode/${seasonId}-${ep}`);
   const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/'));
 
   return (
@@ -43,20 +45,16 @@ export function App() {
       <TabBar />
 
       <AnimatePresence>
-        {showMatch?.params.showId && (
+        {showMatch && Number.isFinite(showId) && (
           <StackLayer key="show" onBack={back} z={30}>
-            <ShowScreen
-              showId={showMatch.params.showId}
-              onBack={back}
-              onOpenEpisode={(epId) => openEpisode(showMatch.params.showId!, epId)}
-            />
+            <ShowScreen showId={showId} onBack={back} onOpenShow={openShow} onOpenEpisode={(seasonId, ep) => openEpisode(showId, seasonId, ep)} />
           </StackLayer>
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {epMatch?.params.showId && (
+        {epMatch && Number.isFinite(showId) && epSeason && epNum && (
           <StackLayer key="episode" onBack={back} z={40}>
-            <EpisodeScreen showId={epMatch.params.showId} onBack={back} />
+            <EpisodeScreen showId={showId} seasonId={epSeason} episode={epNum} onBack={back} onOpenShow={openShow} />
           </StackLayer>
         )}
       </AnimatePresence>
