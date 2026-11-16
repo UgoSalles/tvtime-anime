@@ -22,6 +22,8 @@ export interface Anime {
   status: MediaStatus | null;
   title: Titles;
   episodes: number | null;
+  /** Durée d'un épisode en minutes. */
+  duration: number | null;
   season: MediaSeason | null;
   seasonYear: number | null;
   startDate: FuzzyDate | null;
@@ -36,7 +38,6 @@ export interface Anime {
 
 export interface AnimeDetail extends Anime {
   description: string | null;
-  duration: number | null;
   popularity: number | null;
   siteUrl: string | null;
   endDate: FuzzyDate | null;

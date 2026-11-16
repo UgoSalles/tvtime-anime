@@ -29,21 +29,24 @@ export function airedCount(a: Anime): number | null {
 
 export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchise {
   const animes = nodes.map((n) => n.anime);
-  const seasonsRaw = animes
+  let seasonsRaw = animes
     .filter((a) => a.format && SEASON_FORMATS.has(a.format))
     .sort((a, b) => dateKey(a) - dateKey(b) || a.id - b.id);
+  // Film / OVA / spécial sans série TV : l'entrée demandée est elle-même l'unique « saison ».
+  if (!seasonsRaw.length) seasonsRaw = animes.filter((a) => a.id === rootId);
+  const seasonIds = new Set(seasonsRaw.map((a) => a.id));
   let offset = 0;
   const seasons: FranchiseSeason[] = seasonsRaw.map((anime, i) => {
     const s: FranchiseSeason = { number: i + 1, anime, aired: airedCount(anime), offset };
     offset += anime.episodes ?? s.aired ?? 0;
     return s;
   });
-  const extras = animes.filter((a) => !(a.format && SEASON_FORMATS.has(a.format))).sort((a, b) => dateKey(a) - dateKey(b));
+  const extras = animes.filter((a) => !seasonIds.has(a.id)).sort((a, b) => dateKey(a) - dateKey(b));
   return { rootId: seasons[0]?.anime.id ?? rootId, ids: animes.map((a) => a.id), seasons, extras };
 }
 
 export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Franchise> {
-  return cachedFetch(`franchise:${id}`, TTL.franchise, async () => {
+  return cachedFetch(`franchise2:${id}`, TTL.franchise, async () => {
     const known = new Map<number, FranchiseNode>();
     const seen = new Set<number>([id]);
     let frontier = [id];
@@ -59,7 +62,7 @@ export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Fran
     // La même franchise répond pour chacun de ses membres (évite de refaire le parcours).
     const now = Date.now();
     db.apiCache
-      .bulkPut(franchise.ids.map((m) => ({ key: `franchise:${m}`, value: franchise, fetchedAt: now })))
+      .bulkPut(franchise.ids.map((m) => ({ key: `franchise2:${m}`, value: franchise, fetchedAt: now })))
       .catch(() => undefined);
     return franchise;
   });

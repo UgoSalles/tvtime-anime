@@ -14,6 +14,7 @@ interface RawMedia {
   status: Anime['status'];
   title: Anime['title'];
   episodes: number | null;
+  duration?: number | null;
   season: Anime['season'];
   seasonYear: number | null;
   startDate?: FuzzyDate | null;
@@ -33,6 +34,7 @@ export function normalize(m: RawMedia): Anime {
     status: m.status ?? null,
     title: m.title,
     episodes: m.episodes ?? null,
+    duration: m.duration ?? null,
     season: m.season ?? null,
     seasonYear: m.seasonYear ?? null,
     startDate: m.startDate ?? null,
@@ -47,7 +49,7 @@ export function normalize(m: RawMedia): Anime {
 }
 
 const FIELDS = `
-  id idMal format status episodes season seasonYear averageScore genres bannerImage
+  id idMal format status episodes duration season seasonYear averageScore genres bannerImage
   title { romaji english native }
   coverImage { large extraLarge color }
   startDate { year month day }
@@ -147,7 +149,7 @@ export function browseByGenre(genre: string | null, page = 1, signal?: AbortSign
 export function fetchAnimeDetail(id: number, signal?: AbortSignal): Promise<AnimeDetail> {
   const q = `query($id:Int){ Media(id:$id,type:ANIME){
     ${FIELDS}
-    description(asHtml:false) duration popularity siteUrl endDate{year month day}
+    description(asHtml:false) popularity siteUrl endDate{year month day}
     studios(isMain:true){ nodes{ name } }
     streamingEpisodes{ title thumbnail }
     characters(sort:[ROLE,FAVOURITES_DESC],perPage:12){ edges{ role node{ id name{ full } image{ large } } } }
@@ -163,7 +165,6 @@ export function fetchAnimeDetail(id: number, signal?: AbortSignal): Promise<Anim
       return {
         ...normalize(m),
         description: m.description ?? null,
-        duration: m.duration ?? null,
         popularity: m.popularity ?? null,
         siteUrl: m.siteUrl ?? null,
         endDate: m.endDate ?? null,
