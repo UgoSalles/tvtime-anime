@@ -29,7 +29,19 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
         navigateFallback: '/index.html',
-        // Phase 5 : runtimeCaching AniList / Jikan / images.
+        // Les données API (AniList en POST, Jikan) sont cachées par l'app elle-même dans IndexedDB
+        // (src/api/cache.ts). Le service worker s'occupe des images, déjà vues = disponibles hors-ligne.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /(^|\.)anilist\.co$|(^|\.)crunchyroll\.com$|(^|\.)myanimelist\.net$/.test(url.hostname) && /\.(?:jpe?g|png|webp|gif|avif)$/i.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'anime-images',
+              expiration: { maxEntries: 600, maxAgeSeconds: 60 * 24 * 3600, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],

@@ -11,7 +11,12 @@ import './index.css';
 import { ThemeProvider } from './lib/ThemeProvider';
 import { App } from './App';
 
-const queryClient = new QueryClient();
+// networkMode « always » : les requêtes passent par notre cache IndexedDB, qui sait répondre hors-ligne
+// (sinon React Query suspend tout tant que navigator.onLine est faux).
+const queryClient = new QueryClient({ defaultOptions: { queries: { networkMode: 'always', retry: 1 }, mutations: { networkMode: 'always' } } });
+
+// Demande un stockage « persistant » pour que le navigateur n'efface pas les suivis (ignoré sans effet par iOS).
+navigator.storage?.persist?.().catch(() => undefined);
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
