@@ -61,3 +61,10 @@ export function mergeKitsu(list: SeasonEpisodes, kitsu: Record<number, KitsuEpis
   });
   return { ...list, episodes, degraded: list.degraded && !episodes.some((e) => e.title) };
 }
+
+/** Date de diffusion de repli (AniList) pour les épisodes qui n'en ont pas. */
+export function mergeAired(list: EpisodeInfo[], aired: { episode: number; airingAt: number }[] | undefined): EpisodeInfo[] {
+  if (!aired?.length) return list;
+  const byEp = new Map(aired.map((a) => [a.episode, a.airingAt]));
+  return list.map((e) => (e.aired || !byEp.has(e.number) ? e : { ...e, aired: new Date(byEp.get(e.number)! * 1000).toISOString() }));
+}

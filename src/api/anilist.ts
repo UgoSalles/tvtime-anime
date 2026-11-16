@@ -248,6 +248,15 @@ export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): 
 
 // ── Calendrier ─────────────────────────────────────────────────────────────
 /**
+ * Dates des derniers épisodes DÉJÀ diffusés (50 au plus récent) : sert de date de repli quand Jikan et Kitsu
+ * n'en donnent pas, pour rapprocher les images des sorties récentes.
+ */
+export function fetchAiredRecent(mediaId: number, signal?: AbortSignal): Promise<AiringEntry[]> {
+  const q = `query($id:Int){ Page(perPage:50){ airingSchedules(mediaId:$id,notYetAired:false,sort:EPISODE_DESC){ mediaId episode airingAt } } }`;
+  return cachedFetch(`aired:${mediaId}`, TTL.airing, async () => (await gql<{ Page: { airingSchedules: AiringEntry[] } }>(q, { id: mediaId }, signal)).Page.airingSchedules);
+}
+
+/**
  * TOUS les épisodes programmés (pas encore diffusés) des médias donnés, jusqu'à la fin de ce qu'AniList
  * a planifié — plus de fenêtre de 30 jours. Paginé par 50.
  */

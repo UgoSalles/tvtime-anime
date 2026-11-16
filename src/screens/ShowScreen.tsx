@@ -5,8 +5,7 @@ import { IconChevronDown, IconMore, IconShare } from '../components/Icons';
 import { Poster } from '../components/Poster';
 import { PosterRow } from '../components/PosterRow';
 import { TopTabs } from '../components/TopTabs';
-import { useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
-import { EPISODES_PER_PAGE } from '../api/episodes';
+import { useAllEpisodes, useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
 import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { useFrench } from '../api/translate';
@@ -44,8 +43,7 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   onOpenEpisode: (seasonId: number, ep: number) => void;
   watched: WatchMap;
 }) {
-  const [page, setPage] = useState(1);
-  const q = useEpisodeList(season, page);
+  const q = useAllEpisodes(season);
   const data = q.data;
   // Images d'épisode réelles uniquement : pas d'image de remplacement. Si aucun épisode n'en a, on n'affiche que le numéro.
   const withImages = !!data?.episodes.some((e) => e.thumbnail) || q.thumbsLoading;
@@ -55,15 +53,6 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
       {season.part && <p className="bg-chip px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-chip-text">Partie {season.part}</p>}
       {q.isPlaceholder && <p className="px-4 py-1.5 text-[11px] text-ink-3">Chargement des titres…</p>}
       {data.degraded && !q.isPlaceholder && <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Titres et dates indisponibles pour le moment (numérotation seule).</p>}
-      {data.pageCount > 1 && (
-        <div className="scroll-x flex gap-2 px-4 py-2">
-          {Array.from({ length: data.pageCount }, (_, i) => i + 1).map((p) => (
-            <button key={p} onClick={() => setPage(p)} className={`h-7 shrink-0 rounded-full px-3 text-[11px] font-bold ${p === page ? 'bg-yellow text-black' : 'bg-chip text-chip-text'}`}>
-              {(p - 1) * EPISODES_PER_PAGE + 1}–{Math.min(data.total, p * EPISODES_PER_PAGE)}
-            </button>
-          ))}
-        </div>
-      )}
       {data.episodes.map((e) => {
         const info = watched.get(epKey(season.anime.id, e.number));
         const unaired = e.number > (season.aired ?? 0);

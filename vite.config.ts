@@ -51,11 +51,11 @@ export default defineConfig({
         // (src/api/cache.ts). Le service worker s'occupe des images, déjà vues = disponibles hors-ligne.
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => /(^|\.)anilist\.co$|(^|\.)crunchyroll\.com$|(^|\.)myanimelist\.net$/.test(url.hostname) && /\.(?:jpe?g|png|webp|gif|avif)$/i.test(url.pathname),
+            urlPattern: ({ url }) => /(^|\.)anilist\.co$|(^|\.)crunchyroll\.com$|(^|\.)myanimelist\.net$|(^|\.)kitsu\.(?:app|io)$|(^|\.)tvmaze\.com$/.test(url.hostname) && /\.(?:jpe?g|png|webp|gif|avif)$/i.test(url.pathname),
             handler: 'CacheFirst',
             options: {
               cacheName: 'anime-images',
-              expiration: { maxEntries: 600, maxAgeSeconds: 60 * 24 * 3600, purgeOnQuotaError: true },
+              expiration: { maxEntries: 1500, maxAgeSeconds: 60 * 24 * 3600, purgeOnQuotaError: true },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
