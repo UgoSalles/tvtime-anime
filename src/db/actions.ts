@@ -3,6 +3,8 @@ import type { WatchMap } from './hooks';
 import { airedOf, allAired, epKey, markEpisodes, rewatchEpisodes, upTo, type EpRef } from './repo';
 import { openActions, type SheetAction } from '../store/sheet';
 
+/** Épisodes diffusés des entrées qui précèdent `season` dans la franchise (ordre chronologique). */
+const before = (f: Franchise, season: FranchiseSeason) => f.seasons.slice(0, f.seasons.indexOf(season)).flatMap(airedOf);
 const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
 const isWatched = (w: WatchMap, e: EpRef) => w.has(epKey(e.seasonId, e.episode));
 
@@ -36,20 +38,21 @@ export async function toggleEpisode(f: Franchise, seasonId: number, episode: num
 }
 
 /** Tap sur la coche d'une saison : tout marquer (avec les saisons précédentes si besoin) / revoir / tout décocher. */
-export async function toggleSeason(f: Franchise, season: FranchiseSeason, watched: WatchMap) {
-  const mine = airedOf(season);
+export async function toggleSeason(f: Franchise, parts: FranchiseSeason[], watched: WatchMap) {
+  const season = parts[0]!;
+  const mine = parts.flatMap(airedOf);
   if (!mine.length) return;
   const complete = mine.every((e) => isWatched(watched, e));
 
   if (complete) {
-    const prev = f.seasons.filter((s) => s.number < season.number).flatMap(airedOf);
+    const prev = before(f, season);
     const actions: SheetAction[] = [{ label: 'Revoir la saison', onClick: () => rewatchEpisodes(f, mine) }];
     if (prev.length) actions.push({ label: `Revoir, avec les saisons précédentes (${prev.length + mine.length} épisodes)`, onClick: () => rewatchEpisodes(f, [...prev, ...mine]) });
     actions.push({ label: 'Tout décocher', onClick: () => markEpisodes(f, mine, false), destructive: true });
     return openActions(`Saison ${season.number} terminée`, actions);
   }
 
-  const prevMissing = f.seasons.filter((s) => s.number < season.number).flatMap(airedOf).filter((e) => !isWatched(watched, e));
+  const prevMissing = before(f, season).filter((e) => !isWatched(watched, e));
   const mineMissing = mine.filter((e) => !isWatched(watched, e));
   if (!prevMissing.length) return markEpisodes(f, mineMissing, true);
   openActions(

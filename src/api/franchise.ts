@@ -9,10 +9,14 @@ import type { Anime, Franchise, FranchiseSeason } from './types';
  * et on présente les formats TV / TV_SHORT / ONA comme les saisons d'UNE série ;
  * films, OVA et spéciaux liés vont dans `extras`.
  *
- * Limites connues : les « Part 2 » / cours scindés comptent comme des saisons distinctes ;
- * One Piece reste une seule saison (AniList n'a pas le découpage TVDB « S22 » de TV Time).
+ * Un « Part 2 » / « Cour 2 » (titre explicite + préquelle directe = la saison juste avant) est rattaché à cette
+ * saison : même numéro de saison, `part` / `partOffset` renseignés, épisodes numérotés à la suite.
+ * Limite connue : One Piece reste une seule saison (AniList n'a pas le découpage TVDB « S22 » de TV Time).
  */
 const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA']);
+/** Titre qui annonce la suite d'une même saison (« Part 2 », « 2nd Cour »…). */
+const PART_RE = /\b(?:part|cour)\s*(?:[2-9]|ii|iii|iv)\b|\b(?:2nd|second|3rd|third|4th|fourth)\s+(?:part|cour)\b/i;
+const isPartTitle = (a: Anime) => PART_RE.test(a.title.romaji ?? '') || PART_RE.test(a.title.english ?? '');
 /** Garde-fous de sécurité uniquement (aucune franchise réelle n'approche ces valeurs). */
 const MAX_ROUNDS = 60;
 const MAX_NODES = 400;
@@ -37,18 +41,35 @@ export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchis
   // Film / OVA / spécial sans série TV : l'entrée demandée est elle-même l'unique « saison ».
   if (!seasonsRaw.length) seasonsRaw = animes.filter((a) => a.id === rootId);
   const seasonIds = new Set(seasonsRaw.map((a) => a.id));
+  const prequelsOf = new Map(nodes.map((n) => [n.anime.id, n.prequels]));
   let offset = 0;
-  const seasons: FranchiseSeason[] = seasonsRaw.map((anime, i) => {
-    const s: FranchiseSeason = { number: i + 1, anime, aired: airedCount(anime), offset };
+  let number = 0;
+  const seasons: FranchiseSeason[] = [];
+  for (const anime of seasonsRaw) {
+    const prev = seasons.at(-1);
+    const continues = !!prev && isPartTitle(anime) && (prequelsOf.get(anime.id) ?? []).includes(prev.anime.id);
+    if (!continues) number++;
+    const s: FranchiseSeason = {
+      number,
+      anime,
+      aired: airedCount(anime),
+      offset,
+      partOffset: continues ? (prev!.partOffset ?? 0) + (prev!.anime.episodes ?? prev!.aired ?? 0) : 0,
+    };
     offset += anime.episodes ?? s.aired ?? 0;
-    return s;
-  });
+    seasons.push(s);
+  }
+  // Rang de partie pour les saisons scindées.
+  for (const n of new Set(seasons.map((s) => s.number))) {
+    const group = seasons.filter((s) => s.number === n);
+    if (group.length > 1) group.forEach((s, i) => (s.part = i + 1));
+  }
   const extras = animes.filter((a) => !seasonIds.has(a.id)).sort((a, b) => dateKey(a) - dateKey(b));
   return { rootId: seasons[0]?.anime.id ?? rootId, ids: animes.map((a) => a.id), seasons, extras };
 }
 
 export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Franchise> {
-  return cachedFetch(`franchise4:${id}`, TTL.franchise, async () => {
+  return cachedFetch(`franchise5:${id}`, TTL.franchise, async () => {
     const known = new Map<number, FranchiseNode>();
     const seen = new Set<number>([id]);
     let frontier = [id];
@@ -69,7 +90,7 @@ export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Fran
     // La même franchise répond pour chacun de ses membres (évite de refaire le parcours).
     const now = Date.now();
     db.apiCache
-      .bulkPut(franchise.ids.map((m) => ({ key: `franchise4:${m}`, value: franchise, fetchedAt: now })))
+      .bulkPut(franchise.ids.map((m) => ({ key: `franchise5:${m}`, value: franchise, fetchedAt: now })))
       .catch(() => undefined);
     return franchise;
   });

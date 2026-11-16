@@ -44,7 +44,6 @@ export interface AnimeDetail extends Anime {
   siteUrl: string | null;
   endDate: FuzzyDate | null;
   studios: string[];
-  streamingEpisodes: { title: string; thumbnail: string | null }[];
   characters: { id: number; name: string; image: string | null; role: string }[];
   recommendations: Anime[];
 }
@@ -57,6 +56,10 @@ export interface FranchiseSeason {
   aired: number | null;
   /** Nombre d'épisodes cumulés des saisons précédentes (pour le numéro absolu). */
   offset: number;
+  /** Saison scindée en plusieurs entrées AniList (« Part 2 », « Cour 2 ») : rang de cette partie (1, 2…). */
+  part?: number;
+  /** Épisodes des parties précédentes de la même saison (numéro affiché = partOffset + épisode). */
+  partOffset?: number;
 }
 
 export interface Franchise {
@@ -79,7 +82,6 @@ export interface EpisodeInfo {
   thumbnailLarge?: string | null;
 }
 
-export type StreamingMap = Record<number, { title: string; thumbnail: string | null }[]>;
 
 export interface AiringEntry {
   mediaId: number;

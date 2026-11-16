@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, fetchStreamingBatch, searchAnime } from './anilist';
-import { loadSeasonEpisodes, mergeKitsu, mergeStreaming, placeholderEpisodes } from './episodes';
+import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, searchAnime } from './anilist';
+import { loadSeasonEpisodes, mergeKitsu, placeholderEpisodes } from './episodes';
 import { fetchKitsuEpisodes } from './kitsu';
 import { resolveFranchise } from './franchise';
 import type { Franchise, FranchiseSeason } from './types';
@@ -57,22 +57,12 @@ export const useSeasonEpisodes = (season: FranchiseSeason | undefined, page: num
     placeholderData: () => (season ? placeholderEpisodes(season, page) : undefined),
   });
 
-/** Vignettes et titres de secours de TOUTES les saisons d'une franchise, en une requête. */
-export const useFranchiseStreaming = (franchise: Franchise | undefined, enabled = true) =>
-  useQuery({
-    queryKey: ['streaming', franchise?.rootId],
-    queryFn: ({ signal }) => fetchStreamingBatch(franchise!.seasons.map((s) => s.anime.id), signal),
-    enabled: enabled && !!franchise,
-    staleTime: 12 * HOUR,
-  });
-
 /**
- * Liste d'épisodes complète : numéros instantanés → titres/dates (Jikan) → vignettes (AniList), chaque
+ * Liste d'épisodes complète : numéros instantanés → titres/dates (Jikan) → titres de secours et images (Kitsu), chaque
  * source arrivant indépendamment.
  */
 export function useEpisodeList(franchise: Franchise | undefined, season: FranchiseSeason | undefined, page: number, enabled = true) {
   const eps = useSeasonEpisodes(season, page, enabled);
-  const streaming = useFranchiseStreaming(franchise, enabled);
   // Vraies images d'épisode (Kitsu), indépendantes d'AniList et de Jikan.
   const malId = season?.anime.idMal ?? null;
   const kitsu = useQuery({
@@ -82,8 +72,7 @@ export function useEpisodeList(franchise: Franchise | undefined, season: Franchi
     staleTime: 12 * HOUR,
     retry: 0,
   });
-  const base = eps.data ? mergeStreaming(eps.data, season ? streaming.data?.[season.anime.id] : undefined) : undefined;
-  const data = base ? mergeKitsu(base, kitsu.data) : undefined;
+  const data = eps.data ? mergeKitsu(eps.data, kitsu.data) : undefined;
   return { data, isPlaceholder: eps.isPlaceholderData, thumbsLoading: kitsu.isLoading };
 }
 

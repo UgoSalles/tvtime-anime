@@ -1,7 +1,7 @@
 import { cachedFetch, TTL } from './cache';
 import { db, type CacheRow } from '../lib/db';
 import { fetchJsonWithRetry, RateLimitedQueue } from './queue';
-import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, StreamingMap, Titles } from './types';
+import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, Titles } from './types';
 
 const ENDPOINT = 'https://graphql.anilist.co';
 // 30 req/min constatées (mode dégradé d'AniList), rafale de 6 : prudent et suffisant avec le cache.
@@ -158,7 +158,6 @@ export function fetchAnimeDetail(id: number, signal?: AbortSignal): Promise<Anim
     ${FIELDS}
     description(asHtml:false) popularity siteUrl endDate{year month day}
     studios(isMain:true){ nodes{ name } }
-    streamingEpisodes{ title thumbnail }
     characters(sort:[ROLE,FAVOURITES_DESC],perPage:12){ edges{ role node{ id name{ full } image{ large } } } }
     recommendations(sort:RATING_DESC,perPage:12){ nodes{ mediaRecommendation{ ${FIELDS} } } }
   } }`;
@@ -176,10 +175,6 @@ export function fetchAnimeDetail(id: number, signal?: AbortSignal): Promise<Anim
         siteUrl: m.siteUrl ?? null,
         endDate: m.endDate ?? null,
         studios: (m.studios?.nodes ?? []).map((n: { name: string }) => n.name),
-        streamingEpisodes: (m.streamingEpisodes ?? []).map((e: { title: string; thumbnail: string | null }) => ({
-          title: e.title,
-          thumbnail: e.thumbnail ?? null,
-        })),
         characters: (m.characters?.edges ?? []).map((e: any) => ({
           id: e.node.id,
           name: e.node.name.full,
@@ -199,8 +194,10 @@ export function fetchAnimeDetail(id: number, signal?: AbortSignal): Promise<Anim
 // ── Franchise : nœuds avec relations (batch par id_in) ─────────────────────
 export interface FranchiseNode {
   anime: Anime;
-  /** Ids reliés par PREQUEL / SEQUEL (type ANIME uniquement). */
+  /** Ids reliés par PREQUEL / SEQUEL (type ANIME), sur plusieurs générations : sert à parcourir la franchise. */
   links: number[];
+  /** Préquelles DIRECTES (type ANIME) : sert à rattacher un « Part 2 » à sa saison. */
+  prequels: number[];
 }
 
 interface RelEdge {
@@ -242,7 +239,8 @@ export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): 
     const links = new Set<number>();
     collectLinks(m.relations?.edges, links);
     links.delete(m.id);
-    return { anime: normalize(m), links: [...links] };
+    const prequels = (m.relations?.edges ?? []).filter((e) => e.relationType === 'PREQUEL' && e.node.type === 'ANIME').map((e) => e.node.id);
+    return { anime: normalize(m), links: [...links], prequels };
   });
 }
 
@@ -264,45 +262,6 @@ export function fetchAiringSchedule(mediaIds: number[], signal?: AbortSignal): P
     }
     return out;
   });
-}
-
-/**
- * Titres + vignettes d'épisodes (AniList `streamingEpisodes`) de plusieurs saisons en UNE requête.
- * Chaque saison est mise en cache séparément ; seules les manquantes sont demandées.
- */
-export async function fetchStreamingBatch(ids: number[], signal?: AbortSignal): Promise<StreamingMap> {
-  const out: StreamingMap = {};
-  const rows = await db.apiCache.bulkGet(ids.map((id) => `stream:${id}`)).catch(() => [] as (CacheRow | undefined)[]);
-  const missing: number[] = [];
-  ids.forEach((id, i) => {
-    const r = rows[i];
-    if (r && Date.now() - r.fetchedAt < TTL.detail) out[id] = r.value as StreamingMap[number];
-    else missing.push(id);
-  });
-  if (missing.length) {
-    try {
-      const d = await gql<{ Page: { media: { id: number; streamingEpisodes: { title: string; thumbnail: string | null }[] | null }[] } }>(
-        `query($ids:[Int]){ Page(perPage:50){ media(id_in:$ids,type:ANIME){ id streamingEpisodes{ title thumbnail } } } }`,
-        { ids: missing },
-        signal,
-      );
-      const now = Date.now();
-      const puts: CacheRow[] = [];
-      for (const m of d.Page.media) {
-        const list = (m.streamingEpisodes ?? []).map((e) => ({ title: e.title, thumbnail: e.thumbnail ?? null }));
-        out[m.id] = list;
-        puts.push({ key: `stream:${m.id}`, value: list, fetchedAt: now });
-      }
-      db.apiCache.bulkPut(puts).catch(() => undefined);
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      // réseau KO : on se rabat sur d'éventuelles valeurs périmées
-      ids.forEach((id, i) => {
-        if (!out[id] && rows[i]) out[id] = rows[i]!.value as StreamingMap[number];
-      });
-    }
-  }
-  return out;
 }
 
 // ── Import ─────────────────────────────────────────────────────────────────

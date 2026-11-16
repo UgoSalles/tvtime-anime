@@ -6,6 +6,7 @@ import { useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
 import { useFollowOf, useReaction, useWatchedMap } from '../db/hooks';
 import { epKey, setReaction } from '../db/repo';
 import { toggleEpisode } from '../db/actions';
+import { shownEpisode } from '../lib/seasons';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 
 /**
@@ -47,7 +48,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
   const unaired = !!season && episode > (season.aired ?? 0);
   const react = (patch: Parameters<typeof setReaction>[3]) => franchise.data && setReaction(franchise.data, seasonId, episode, patch);
 
-  const code = season ? `S${pad(season.number)} | E${pad(episode)}${season.offset > 0 ? ` (E${season.offset + episode})` : ''}` : `E${pad(episode)}`;
+  const code = season ? `S${pad(season.number)} | E${pad(shownEpisode(season, episode))}${season.offset > 0 ? ` (E${season.offset + episode})` : ''}` : `E${pad(episode)}`;
   const aired = info?.aired ? new Date(info.aired).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
 
   return (
@@ -63,7 +64,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
           <div className="absolute inset-x-0 bottom-0 px-page pb-4 text-white">
             <div className="mb-2">{root && <ShowPill name={stripSeasonSuffix(t(root.title))} onClick={() => onOpenShow(showId)} />}</div>
             <div className="text-[20px] font-extrabold leading-6">{code}</div>
-            <div className="mt-0.5 min-h-[20px] text-[14px] font-medium text-white/90">{info?.title ?? `Épisode ${episode}`}</div>
+            <div className="mt-0.5 min-h-[20px] text-[14px] font-medium text-white/90">{info?.title ?? `Épisode ${season ? shownEpisode(season, episode) : episode}`}</div>
           </div>
         </div>
 

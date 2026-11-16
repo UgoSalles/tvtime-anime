@@ -1,3 +1,4 @@
+import { locateInSeason } from '../lib/seasons';
 import { fetchAnilistIdsByMal, searchAnime } from '../api/anilist';
 import { locateAbsolute, resolveFranchise } from '../api/franchise';
 import type { Anime, Franchise } from '../api/types';
@@ -85,12 +86,10 @@ interface Pair {
  */
 export function mapPairs(f: Franchise, pairs: Pair[]): { rows: { seasonId: number; episode: number; at: number }[]; approximate: boolean } {
   const real = pairs.filter((p) => p.season > 0);
-  const fits = real.every((p) => {
-    const s = f.seasons[p.season - 1];
-    return !!s && p.episode <= (s.aired ?? s.anime.episodes ?? Infinity);
-  });
+  const located = real.map((p) => locateInSeason(f, p.season, p.episode));
+  const fits = located.every((l) => !!l);
   const now = Date.now();
-  if (fits) return { rows: real.map((p) => ({ seasonId: f.seasons[p.season - 1]!.anime.id, episode: p.episode, at: p.at ?? now })), approximate: false };
+  if (fits) return { rows: real.map((p, i) => ({ seasonId: located[i]!.season.anime.id, episode: located[i]!.episode, at: p.at ?? now })), approximate: false };
   const sorted = [...real].sort((a, b) => a.season - b.season || a.episode - b.episode);
   const rows: { seasonId: number; episode: number; at: number }[] = [];
   sorted.forEach((p, i) => {

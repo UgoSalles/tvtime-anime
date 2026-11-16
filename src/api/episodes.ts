@@ -2,18 +2,6 @@ import { fetchJikanEpisodes } from './jikan';
 import type { KitsuEpisode } from './kitsu';
 import type { EpisodeInfo, FranchiseSeason } from './types';
 
-const EP_RE = /^\s*(?:episode|épisode|ep\.?)\s*(\d+)\s*[-–:]\s*(.+)$/i;
-
-/** Titres de secours : `streamingEpisodes` d'AniList (« Episode 5 - Titre »). */
-function parseStreaming(list: { title: string; thumbnail: string | null }[]): Map<number, { title: string; thumbnail: string | null }> {
-  const m = new Map<number, { title: string; thumbnail: string | null }>();
-  list.forEach((e, i) => {
-    const hit = EP_RE.exec(e.title);
-    m.set(hit ? Number(hit[1]) : i + 1, { title: hit ? hit[2]!.trim() : e.title, thumbnail: e.thumbnail });
-  });
-  return m;
-}
-
 export const EPISODES_PER_PAGE = 100;
 
 export interface SeasonEpisodes {
@@ -45,8 +33,6 @@ export function placeholderEpisodes(season: FranchiseSeason, page: number): Seas
 
 /**
  * Une page (100 épisodes) enrichie par Jikan (titres + dates) : UN seul appel, rapide.
- * Les vignettes et titres de secours d'AniList viennent à part (`fetchStreamingBatch`, un lot par franchise)
- * pour que Jikan n'attende jamais la file d'AniList.
  */
 export async function loadSeasonEpisodes(season: FranchiseSeason, page: number, signal?: AbortSignal): Promise<SeasonEpisodes> {
   const base = placeholderEpisodes(season, page);
@@ -64,17 +50,6 @@ export async function loadSeasonEpisodes(season: FranchiseSeason, page: number, 
     return j ? { ...e, title: j.title ?? null, aired: j.aired ?? e.aired, filler: j.filler, recap: j.recap } : e;
   });
   return { ...base, episodes, degraded: byNumber.size === 0 };
-}
-
-/** Complète une liste avec les titres de secours et les vignettes d'AniList. */
-export function mergeStreaming(list: SeasonEpisodes, streaming: { title: string; thumbnail: string | null }[] | undefined): SeasonEpisodes {
-  if (!streaming?.length) return list;
-  const m = parseStreaming(streaming);
-  const episodes = list.episodes.map((e) => {
-    const st = m.get(e.number);
-    return st ? { ...e, title: e.title ?? st.title, thumbnail: st.thumbnail } : e;
-  });
-  return { ...list, episodes, degraded: list.degraded && !episodes.some((e) => e.title) };
 }
 
 /** Complète une liste avec les vraies images d'épisode (Kitsu), prioritaires, et les titres/dates manquants. */

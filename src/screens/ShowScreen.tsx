@@ -11,6 +11,7 @@ import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { useFrench } from '../api/translate';
 import { genreFr } from '../lib/genres';
+import { seasonCount, seasonGroups, shownEpisode } from '../lib/seasons';
 import { layout } from '../theme';
 import { useFollowOf, useListsOfShow, useLists, useWatchedMap, type WatchMap } from '../db/hooks';
 import { addToList, allAired, airedOf, createList, ensureFollow, epKey, markEpisodes, removeFromList, setDropped, setLater, toggleFavorite, unfollow } from '../db/repo';
@@ -51,6 +52,7 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   if (!data) return <p className="px-4 py-4 text-[13px] text-ink-3">Épisodes indisponibles (hors-ligne ?).</p>;
   return (
     <div className="border-t border-divider">
+      {season.part && <p className="bg-chip px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-chip-text">Partie {season.part}</p>}
       {q.isPlaceholder && <p className="px-4 py-1.5 text-[11px] text-ink-3">Chargement des titres…</p>}
       {data.degraded && !q.isPlaceholder && <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Titres et dates indisponibles pour le moment (numérotation seule).</p>}
       {data.pageCount > 1 && (
@@ -78,16 +80,16 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
             {withImages ? (
               e.thumbnail ? (
                 <Poster title="" src={e.thumbnail} color={season.anime.color} showTitle={false} className="h-[54px] w-24 shrink-0 rounded-[4px]">
-                  <span className="absolute bottom-0 left-0 rounded-tr-[4px] bg-black/70 px-1.5 text-[11px] font-bold leading-[16px] text-white">{e.number}</span>
+                  <span className="absolute bottom-0 left-0 rounded-tr-[4px] bg-black/70 px-1.5 text-[11px] font-bold leading-[16px] text-white">{shownEpisode(season, e.number)}</span>
                 </Poster>
               ) : (
-                <span className="grid h-[54px] w-24 shrink-0 place-items-center rounded-[4px] bg-chip text-[15px] font-bold text-chip-text">{e.number}</span>
+                <span className="grid h-[54px] w-24 shrink-0 place-items-center rounded-[4px] bg-chip text-[15px] font-bold text-chip-text">{shownEpisode(season, e.number)}</span>
               )
             ) : (
-              <span className="w-8 shrink-0 text-center text-[15px] font-bold text-ink-3">{e.number}</span>
+              <span className="w-8 shrink-0 text-center text-[15px] font-bold text-ink-3">{shownEpisode(season, e.number)}</span>
             )}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${e.number}`}</span>
+              <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${shownEpisode(season, e.number)}`}</span>
               <span className="block truncate text-[11px] text-ink-3">
                 {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null, (info?.count ?? 1) > 1 ? `Vu ×${info!.count}` : null].filter(Boolean).join(' · ')}
               </span>
@@ -137,7 +139,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
             <button onClick={() => onOpenEpisode(next.season.anime.id, next.episode)} className="block w-full text-left">
               <Poster title="" src={nextInfo?.thumbnailLarge ?? nextInfo?.thumbnail} color={next.season.anime.color} showTitle={false} className="h-[88px] w-full rounded-card">
                 <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-[12px] font-bold text-white">
-                  S{String(next.season.number).padStart(2, '0')} | E{String(next.episode).padStart(2, '0')} · {nextInfo?.title ?? `Épisode ${next.episode}`}
+                  S{String(next.season.number).padStart(2, '0')} | E{String(shownEpisode(next.season, next.episode)).padStart(2, '0')} · {nextInfo?.title ?? `Épisode ${shownEpisode(next.season, next.episode)}`}
                 </span>
               </Poster>
             </button>
@@ -149,34 +151,36 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
         <CheckButton checked={allDone} onToggle={() => toggleAll(franchise, watched)} size={26} />
       </div>
       <div className="flex flex-col gap-2.5 px-page">
-        {franchise.seasons.map((s) => {
-          const aired = s.aired ?? 0;
-          const total = s.anime.episodes ?? aired;
-          const done = airedOf(s).filter((e) => watched.has(epKey(e.seasonId, e.episode))).length;
+        {seasonGroups(franchise).map(({ number, parts }) => {
+          const s = parts[0]!;
+          const aired = parts.reduce((n, p) => n + (p.aired ?? 0), 0);
+          const total = parts.reduce((n, p) => n + (p.anime.episodes ?? p.aired ?? 0), 0);
+          const done = parts.flatMap(airedOf).filter((e) => watched.has(epKey(e.seasonId, e.episode))).length;
           const ratio = total ? done / total : 0;
           const complete = aired > 0 && done === aired;
-          const isOpen = open === s.anime.id;
+          const isOpen = open === number;
           return (
-            <div key={s.anime.id} className="shadow-card overflow-hidden rounded-card bg-surface">
-              <div className="flex min-h-[62px] items-center px-4 py-2.5" role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : s.anime.id)}>
+            <div key={number} className="shadow-card overflow-hidden rounded-card bg-surface">
+              <div className="flex min-h-[62px] items-center px-4 py-2.5" role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : number)}>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center">
-                    <span className="text-[20px] font-bold leading-6 text-ink">Saison {s.number}</span>
+                    <span className="text-[20px] font-bold leading-6 text-ink">Saison {number}</span>
                     <IconChevronDown size={16} className={`ml-2 shrink-0 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                   </span>
                   <span className="block truncate text-[12px] font-medium text-ink-3">
                     {t(s.anime.title)}
                     {(s.anime.seasonYear ?? s.anime.startDate?.year) ? ` (${s.anime.seasonYear ?? s.anime.startDate?.year})` : ''}
+                    {parts.length > 1 ? ` · ${parts.length} parties` : ''}
                   </span>
                 </span>
                 <span className="ml-3 mr-3 text-[14px] font-medium text-ink-3">{done}/{total || '?'}</span>
-                <CheckButton checked={complete} onToggle={() => toggleSeason(franchise, s, watched)} size={34} />
+                <CheckButton checked={complete} onToggle={() => toggleSeason(franchise, parts, watched)} size={34} />
               </div>
               <div className="h-1 w-full bg-progress-track">
                 <motion.div className="h-full bg-green" initial={false} animate={{ width: `${ratio * 100}%` }} transition={{ duration: 0.3 }} />
               </div>
               {isOpen && s.anime.description && <SeasonSynopsis text={stripHtml(s.anime.description)} />}
-              {isOpen && <SeasonEpisodes season={s} franchise={franchise} onOpenEpisode={onOpenEpisode} watched={watched} />}
+              {isOpen && parts.map((p) => <SeasonEpisodes key={p.anime.id} season={p} franchise={franchise} onOpenEpisode={onOpenEpisode} watched={watched} />)}
             </div>
           );
         })}
@@ -336,7 +340,7 @@ export function ShowScreen({ showId, onBack, onOpenShow, onOpenEpisode }: {
               <h1 className="text-[24px] font-bold leading-7">{title || ' '}</h1>
               {franchise.data && (
                 <p className="mt-0.5 text-[13px] font-medium text-white/85">
-                  {franchise.data.seasons.length} saison{franchise.data.seasons.length > 1 ? 's' : ''}
+                  {seasonCount(franchise.data)} saison{seasonCount(franchise.data) > 1 ? 's' : ''}
                   {franchise.data.seasons.at(-1)?.anime.status ? ` · ${STATUS[franchise.data.seasons.at(-1)!.anime.status!]}` : ''}
                 </p>
               )}

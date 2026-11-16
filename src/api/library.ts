@@ -5,7 +5,7 @@ import { buildFranchise, resolveFranchise } from './franchise';
 import { TTL } from './cache';
 import type { Franchise } from './types';
 
-const key = (id: number) => `franchise4:${id}`;
+const key = (id: number) => `franchise5:${id}`;
 
 /**
  * Franchises de TOUTES les séries suivies, vite :

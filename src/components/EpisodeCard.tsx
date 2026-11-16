@@ -19,6 +19,8 @@ export interface EpisodeCardModel {
   color: string | null;
   season: number;
   episode: number;
+  /** Numéro affiché si différent du numéro local (saison scindée en parties). */
+  shown?: number;
   /** « (E151) » — affiché seulement si la franchise a plusieurs saisons. */
   absolute?: number;
   behind?: number;
@@ -83,7 +85,7 @@ export function EpisodeCard({
         </div>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-episode-code text-ink" style={compact ? { fontSize: 15 } : undefined}>
-            S{pad(ep.season)} | E{pad(ep.episode)}
+            S{pad(ep.season)} | E{pad(ep.shown ?? ep.episode)}
             {ep.absolute ? ` (E${ep.absolute})` : ''}
           </span>
           {ep.behind ? <span className="text-episode-count text-ink-3">+{ep.behind}</span> : null}
@@ -94,7 +96,7 @@ export function EpisodeCard({
           className={`truncate pr-[60px] text-episode-title text-ink ${compact ? '!font-semibold' : ''}`}
           style={compact ? { fontSize: 14 } : undefined}
         >
-          {ep.title ?? `Épisode ${ep.episode}`}
+          {ep.title ?? `Épisode ${ep.shown ?? ep.episode}`}
         </div>
       </div>
       <div className="absolute right-3 top-1/2 -translate-y-1/2">

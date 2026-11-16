@@ -12,6 +12,7 @@ import { markEpisodes, epKey } from '../db/repo';
 import { toggleEpisode } from '../db/actions';
 import type { WatchMap } from '../db/hooks';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
+import { shownEpisode } from '../lib/seasons';
 import { bucketOf, useLibrary, type Bucket, type ShowState } from '../lib/library';
 import { buildUpcoming, upcomingSeasons, type UpcomingKind } from '../lib/upcoming';
 import { db } from '../lib/db';
@@ -66,9 +67,10 @@ function WatchRow({ state, ...nav }: { state: ShowState } & Nav) {
     color: next.season.anime.color,
     season: next.season.number,
     episode: next.episode,
+    shown: shownEpisode(next.season, next.episode),
     absolute: next.absolute !== next.episode ? next.absolute : undefined,
     behind: state.behind || undefined,
-    premiere: next.season.number === 1 && next.episode === 1 && !state.started,
+    premiere: next.absolute === 1 && !state.started,
     title,
   };
   return <EpisodeCard ep={model} {...nav} onCheck={() => markEpisodes(franchise, [{ seasonId: next.season.anime.id, episode: next.episode }], true)} />;
@@ -187,7 +189,8 @@ function Upcoming(nav: Nav) {
           color: it.season.anime.color,
           season: it.season.number,
           episode: it.episode,
-          isNew: it.episode === 1,
+          shown: shownEpisode(it.season, it.episode),
+          isNew: shownEpisode(it.season, it.episode) === 1,
           title: HINT[it.kind],
         },
       });
@@ -201,7 +204,7 @@ function Upcoming(nav: Nav) {
   const refreshing = airing.isFetching || qc.isFetching({ queryKey: ['franchise'] }) > 0;
   // Actualiser = jeter le cache du calendrier et des franchises suivies (nouvelles saisons annoncées) puis recharger.
   const refresh = async () => {
-    const keys = (await db.apiCache.toCollection().primaryKeys()).filter((k) => /^(airing2|franchise4):/.test(String(k)));
+    const keys = (await db.apiCache.toCollection().primaryKeys()).filter((k) => /^(airing2|franchise5):/.test(String(k)));
     await db.apiCache.bulkDelete(keys);
     await qc.invalidateQueries({ queryKey: ['franchise'] });
     await qc.invalidateQueries({ queryKey: ['airing'] });
@@ -254,8 +257,9 @@ function Upcoming(nav: Nav) {
                   color: u.season.anime.color,
                   season: u.season.number,
                   episode: 1,
-                  isNew: true,
-                  title: `Nouvelle saison · ${u.label}`,
+                  shown: shownEpisode(u.season, 1),
+                  isNew: !u.season.partOffset,
+                  title: `${u.season.partOffset ? `Suite de la saison ${u.season.number}` : 'Nouvelle saison'} · ${u.label}`,
                 }}
               />
             ))}
