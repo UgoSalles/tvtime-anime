@@ -22,7 +22,7 @@ Les données (AniList) sont gratuites ; tes suivis restent **sur ton téléphone
 - **Restaurer** : *Réglages → Restaurer une sauvegarde*.
 - **Importer ton historique** : *Réglages → Importer* accepte l'export CSV de TV Time, un compte AniList (liste publique) ou un export XML de MyAnimeList.
 - **Mise à jour** : l'app se met à jour toute seule ; ferme-la complètement et rouvre-la pour obtenir la dernière version.
-- Les notifications de sortie d'épisodes arriveront avec les comptes (phase 6).
+- Pas de compte ni de serveur : tout reste sur ton téléphone (pas de notifications push ni de partage entre amis).
 
 ## Pour moi : développer et déployer
 

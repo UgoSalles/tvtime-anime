@@ -240,3 +240,9 @@ Import (CSV TV Time / AniList / MAL XML), export JSON, réglages, onboarding, co
 - **Q6 — Police.** Montserrat (gratuite, auto-hébergée) comme substitut de la police d'origine : OK ?
 - **Q7 — Animations.** Pas de vidéo : en fournir une ou accepter des animations approchantes ?
 - **Q8 — Nom, langue, thème.** Nom définitif de l'app (le brief dit « [TvTime] » entre crochets) ; interface en **français** (captures `v`, `s`) ; thème : suit le système, ou réglage manuel clair/sombre ?
+
+---
+
+## 9. Décision de périmètre (2026-11-16)
+
+**Pas de Supabase / phase 6** : l'app reste 100 % locale sur le téléphone (aucun compte, ni amis, fil d'activité, commentaires partagés, synchro multi-appareils ou notifications push). Les sauvegardes JSON (Réglages) remplacent la synchro.
