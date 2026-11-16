@@ -203,19 +203,47 @@ export interface FranchiseNode {
   links: number[];
 }
 
+interface RelEdge {
+  relationType: string;
+  node: { id: number; type: string; relations?: { edges: RelEdge[] } };
+}
+const isSeqPre = (e: RelEdge) => (e.relationType === 'PREQUEL' || e.relationType === 'SEQUEL') && e.node.type === 'ANIME';
+/** Ids PREQUEL/SEQUEL atteignables, en suivant uniquement ces relations à travers les niveaux imbriqués. */
+function collectLinks(edges: RelEdge[] | undefined, out: Set<number>) {
+  for (const e of edges ?? []) {
+    if (!isSeqPre(e)) continue;
+    out.add(e.node.id);
+    collectLinks(e.node.relations?.edges, out);
+  }
+}
+
+/**
+ * Détails de `ids` + leurs relations PREQUEL/SEQUEL. Les relations sont demandées sur 3 niveaux imbriqués
+ * (ids seulement) : une requête fait ainsi avancer le parcours de 3 saisons d'un coup au lieu d'une.
+ * Si AniList refuse la requête imbriquée (complexité), on retombe sur la version à un seul niveau.
+ */
 export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): Promise<FranchiseNode[]> {
-  const q = `query($ids:[Int]){ Page(perPage:50){ media(id_in:$ids,type:ANIME){
+  const leaf = 'relations{ edges{ relationType node{ id type } } }';
+  const nest = (inner: string) => `relations{ edges{ relationType node{ id type ${inner} } } }`;
+  const build = (rel: string) => `query($ids:[Int]){ Page(perPage:50){ media(id_in:$ids,type:ANIME){
     ${FIELDS}
     description(asHtml:false)
-    relations{ edges{ relationType node{ id type } } }
+    ${rel}
   } } }`;
-  const raw: RawMedia[] = (await gql<{ Page: { media: RawMedia[] } }>(q, { ids }, signal)).Page.media;
-  return raw.map((m) => ({
-    anime: normalize(m),
-    links: (m.relations?.edges ?? [])
-      .filter((e) => (e.relationType === 'PREQUEL' || e.relationType === 'SEQUEL') && e.node.type === 'ANIME')
-      .map((e) => e.node.id),
-  }));
+  type Raw = RawMedia & { relations?: { edges: RelEdge[] } };
+  let raw: Raw[];
+  try {
+    raw = (await gql<{ Page: { media: Raw[] } }>(build(nest(nest(leaf))), { ids }, signal)).Page.media;
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    raw = (await gql<{ Page: { media: Raw[] } }>(build(leaf), { ids }, signal)).Page.media;
+  }
+  return raw.map((m) => {
+    const links = new Set<number>();
+    collectLinks(m.relations?.edges, links);
+    links.delete(m.id);
+    return { anime: normalize(m), links: [...links] };
+  });
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────

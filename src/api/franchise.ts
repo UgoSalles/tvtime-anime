@@ -13,7 +13,9 @@ import type { Anime, Franchise, FranchiseSeason } from './types';
  * One Piece reste une seule saison (AniList n'a pas le découpage TVDB « S22 » de TV Time).
  */
 const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA']);
-const MAX_NODES = 30;
+/** Garde-fous de sécurité uniquement (aucune franchise réelle n'approche ces valeurs). */
+const MAX_ROUNDS = 60;
+const MAX_NODES = 400;
 
 const dateKey = (a: Anime) => {
   const d = a.startDate;
@@ -46,23 +48,28 @@ export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchis
 }
 
 export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Franchise> {
-  return cachedFetch(`franchise3:${id}`, TTL.franchise, async () => {
+  return cachedFetch(`franchise4:${id}`, TTL.franchise, async () => {
     const known = new Map<number, FranchiseNode>();
     const seen = new Set<number>([id]);
     let frontier = [id];
-    for (let round = 0; round < 6 && frontier.length && known.size < MAX_NODES; round++) {
-      const nodes = await fetchFranchiseNodes(frontier.slice(0, 50), signal);
+    // On suit les suites/préquelles jusqu'au bout : la boucle ne s'arrête que quand il n'y a plus rien à explorer.
+    for (let round = 0; frontier.length; round++) {
+      if (round >= MAX_ROUNDS || known.size >= MAX_NODES) throw new Error(`Franchise ${id} : parcours interrompu (trop long)`);
+      const batch = frontier;
       frontier = [];
-      for (const n of nodes) {
-        known.set(n.anime.id, n);
-        for (const l of n.links) if (!seen.has(l)) (seen.add(l), frontier.push(l));
+      for (let i = 0; i < batch.length; i += 50) {
+        for (const n of await fetchFranchiseNodes(batch.slice(i, i + 50), signal)) {
+          known.set(n.anime.id, n);
+          for (const l of n.links) if (!seen.has(l)) (seen.add(l), frontier.push(l));
+        }
       }
+      // Un id demandé mais absent de la réponse (entrée supprimée) ne doit pas bloquer la boucle : il est dans `seen`.
     }
     const franchise = buildFranchise(id, [...known.values()]);
     // La même franchise répond pour chacun de ses membres (évite de refaire le parcours).
     const now = Date.now();
     db.apiCache
-      .bulkPut(franchise.ids.map((m) => ({ key: `franchise3:${m}`, value: franchise, fetchedAt: now })))
+      .bulkPut(franchise.ids.map((m) => ({ key: `franchise4:${m}`, value: franchise, fetchedAt: now })))
       .catch(() => undefined);
     return franchise;
   });

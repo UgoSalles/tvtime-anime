@@ -5,7 +5,7 @@ import { buildFranchise, resolveFranchise } from './franchise';
 import { TTL } from './cache';
 import type { Franchise } from './types';
 
-const key = (id: number) => `franchise3:${id}`;
+const key = (id: number) => `franchise4:${id}`;
 
 /**
  * Franchises de TOUTES les séries suivies, vite :
@@ -57,7 +57,9 @@ export async function loadLibraryFranchises(follows: FollowRow[], onRefreshed: (
   if (missing.length) {
     const { result, deep } = await refresh(missing);
     result.forEach((v, k) => out.set(k, v));
-    runDeep(deep, onRefreshed);
+    // Franchise incomplète (relation vers un id inconnu) : on ne l'affiche pas tronquée, on attend le parcours complet.
+    const full = await Promise.all(deep.map(resolveDeep));
+    deep.forEach((f, i) => full[i] && out.set(f.showId, full[i]!));
   }
   const old = stale.filter((f) => out.has(f.showId) && !missing.includes(f));
   if (old.length)
@@ -70,17 +72,19 @@ export async function loadLibraryFranchises(follows: FollowRow[], onRefreshed: (
   return out;
 }
 
-/** Parcours complet (relations) des franchises dont une nouvelle suite est apparue. */
+/** Parcours complet (relations) d'une franchise dont une saison manque ou dont une suite est apparue. */
+function resolveDeep(f: FollowRow): Promise<Franchise | null> {
+  return db.apiCache
+    .delete(key(f.showId))
+    .then(() => resolveFranchise(f.showId))
+    .then(async (fr) => {
+      // Les ids de la franchise ont changé : on met à jour le suivi pour les prochains lots.
+      await db.follows.update(f.showId, { ids: fr.ids });
+      return fr;
+    })
+    .catch(() => null);
+}
+
 function runDeep(list: FollowRow[], onRefreshed: () => void) {
-  list.forEach((f) => {
-    void db.apiCache
-      .delete(key(f.showId))
-      .then(() => resolveFranchise(f.showId))
-      .then(async (fr) => {
-        // Les ids de la franchise ont changé : on met à jour le suivi pour les prochains lots.
-        await db.follows.update(f.showId, { ids: fr.ids });
-        onRefreshed();
-      })
-      .catch(() => undefined);
-  });
+  list.forEach((f) => void resolveDeep(f).then((fr) => fr && onRefreshed()));
 }

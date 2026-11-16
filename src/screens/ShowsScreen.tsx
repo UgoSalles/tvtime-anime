@@ -201,7 +201,7 @@ function Upcoming(nav: Nav) {
   const refreshing = airing.isFetching || qc.isFetching({ queryKey: ['franchise'] }) > 0;
   // Actualiser = jeter le cache du calendrier et des franchises suivies (nouvelles saisons annoncées) puis recharger.
   const refresh = async () => {
-    const keys = (await db.apiCache.toCollection().primaryKeys()).filter((k) => /^(airing2|franchise3):/.test(String(k)));
+    const keys = (await db.apiCache.toCollection().primaryKeys()).filter((k) => /^(airing2|franchise4):/.test(String(k)));
     await db.apiCache.bulkDelete(keys);
     await qc.invalidateQueries({ queryKey: ['franchise'] });
     await qc.invalidateQueries({ queryKey: ['airing'] });
