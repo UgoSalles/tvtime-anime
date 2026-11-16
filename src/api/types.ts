@@ -34,6 +34,8 @@ export interface Anime {
   averageScore: number | null;
   genres: string[];
   nextAiring: { episode: number; airingAt: number } | null;
+  /** Synopsis (renseigné pour les entrées de franchise). */
+  description?: string | null;
 }
 
 export interface AnimeDetail extends Anime {
@@ -74,6 +76,8 @@ export interface EpisodeInfo {
   recap?: boolean;
   thumbnail?: string | null;
 }
+
+export type StreamingMap = Record<number, { title: string; thumbnail: string | null }[]>;
 
 export interface AiringEntry {
   mediaId: number;

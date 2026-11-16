@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m as motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useSheet } from '../store/sheet';
 import { motion as m } from '../theme';

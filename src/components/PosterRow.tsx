@@ -3,19 +3,21 @@ import { IconCheck, IconChevronRight, IconPlus } from './Icons';
 import { Poster } from './Poster';
 import type { Anime } from '../api/types';
 import { followAnime, unfollow } from '../db/repo';
-import { useFollowOf } from '../db/hooks';
+import { useLibrary } from '../lib/library';
 import { useTitle } from '../lib/titles';
 
 /** Bouton « + » (ajout rapide) → coche verte une fois suivi. */
 export function QuickFollow({ animeId, className = '' }: { animeId: number; className?: string }) {
-  const follow = useFollowOf(animeId);
+  const map = useLibrary().followByAnimeId;
+  const follow = map?.get(animeId);
+  const ready = map !== undefined;
   const [busy, setBusy] = useState(false);
   const followed = !!follow;
   return (
     <button
       type="button"
       aria-label={followed ? 'Ne plus suivre' : 'Suivre'}
-      disabled={busy || follow === undefined}
+      disabled={busy || !ready}
       onClick={async (e) => {
         e.stopPropagation();
         setBusy(true);
@@ -39,7 +41,7 @@ export function PosterTile({ anime, onOpen, width = 112, height = 168 }: { anime
   return (
     <div className="relative shrink-0" style={{ width, height }}>
       <button onClick={() => onOpen(anime.id)} className="block text-left" aria-label={name}>
-        <Poster title={name} src={anime.coverLarge} color={anime.color} className="rounded-poster" style={{ width, height }} />
+        <Poster title={name} src={anime.cover} color={anime.color} className="rounded-poster" style={{ width, height }} />
       </button>
       <QuickFollow animeId={anime.id} className="absolute right-1.5 top-1.5" />
     </div>

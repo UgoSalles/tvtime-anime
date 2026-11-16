@@ -41,7 +41,7 @@ export async function cachedFetch<T>(key: string, ttlMs: number, fetcher: () => 
 export const TTL = {
   list: 30 * 60 * 1000,
   detail: 6 * 60 * 60 * 1000,
-  franchise: 24 * 60 * 60 * 1000,
+  franchise: 6 * 60 * 60 * 1000,
   episodes: 12 * 60 * 60 * 1000,
   airing: 60 * 60 * 1000,
 };

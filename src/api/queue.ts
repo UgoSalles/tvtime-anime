@@ -76,7 +76,7 @@ export async function fetchJsonWithRetry<T>(
   queue: RateLimitedQueue,
   url: string,
   init: RequestInit = {},
-  { retries = 4, signal }: { retries?: number; signal?: AbortSignal } = {},
+  { retries = 4, signal, networkBackoffMs = 1000 }: { retries?: number; signal?: AbortSignal; /** Base du backoff après une erreur réseau. */ networkBackoffMs?: number } = {},
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -99,8 +99,10 @@ export async function fetchJsonWithRetry<T>(
       return (await res.json()) as T;
     } catch (e) {
       if (signal?.aborted || (e instanceof HttpError && e.status < 500)) throw e;
-      lastErr = e; // erreur réseau : on réessaie avec backoff
-      queue.block(2 ** attempt * 1000 + Math.random() * 500);
+      // Erreur réseau : on réessaie avec backoff. (AniList répond 429 SANS en-têtes CORS : le navigateur ne
+      // montre alors qu'une « erreur réseau » ; on laisse donc passer la fenêtre d'une minute.)
+      lastErr = e;
+      queue.block(2 ** attempt * networkBackoffMs + Math.random() * 500);
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error('Request failed');

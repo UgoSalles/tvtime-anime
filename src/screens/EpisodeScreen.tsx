@@ -2,7 +2,7 @@ import { CheckButton } from '../components/CheckButton';
 import { IconCalendar, IconChevronDown, IconShare, IconStar } from '../components/Icons';
 import { ShowPill } from '../components/Chips';
 import { Poster } from '../components/Poster';
-import { useAnimeDetail, useFranchise, useSeasonEpisodes } from '../api/hooks';
+import { useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
 import { useFollowOf, useReaction, useWatchedMap } from '../db/hooks';
 import { epKey, setReaction } from '../db/repo';
 import { toggleEpisode } from '../db/actions';
@@ -34,7 +34,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
   const t = useTitle();
   const franchise = useFranchise(showId);
   const season = franchise.data?.seasons.find((s) => s.anime.id === seasonId);
-  const eps = useSeasonEpisodes(season, Math.ceil(episode / 100));
+  const eps = useEpisodeList(franchise.data, season, Math.ceil(episode / 100));
   const info = eps.data?.episodes.find((e) => e.number === episode);
   const root = franchise.data?.seasons[0]?.anime;
   const follow = useFollowOf(showId);

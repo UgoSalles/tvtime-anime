@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { CheckButton } from '../components/CheckButton';
 import { IconChevronDown, IconMore, IconShare } from '../components/Icons';
 import { Poster } from '../components/Poster';
 import { PosterRow } from '../components/PosterRow';
 import { TopTabs } from '../components/TopTabs';
-import { useAnimeDetail, useFranchise, useSeasonEpisodes } from '../api/hooks';
+import { useAnimeDetail, useEpisodeList, useFranchise } from '../api/hooks';
 import { EPISODES_PER_PAGE } from '../api/episodes';
 import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
@@ -37,15 +37,14 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   watched: WatchMap;
 }) {
   const [page, setPage] = useState(1);
-  const q = useSeasonEpisodes(season, page);
+  const q = useEpisodeList(franchise, season, page);
   const data = q.data;
+  const fallback = season.anime.banner ?? season.anime.cover;
   if (!data) return <p className="px-4 py-4 text-[13px] text-ink-3">Épisodes indisponibles (hors-ligne ?).</p>;
   return (
     <div className="border-t border-divider">
-      {q.isPlaceholderData && <p className="px-4 py-1.5 text-[11px] text-ink-3">Chargement des titres…</p>}
-      {data.degraded && !q.isPlaceholderData && (
-        <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Titres et dates indisponibles pour le moment (numérotation seule).</p>
-      )}
+      {q.isPlaceholder && <p className="px-4 py-1.5 text-[11px] text-ink-3">Chargement des titres…</p>}
+      {data.degraded && !q.isPlaceholder && <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Titres et dates indisponibles pour le moment (numérotation seule).</p>}
       {data.pageCount > 1 && (
         <div className="scroll-x flex gap-2 px-4 py-2">
           {Array.from({ length: data.pageCount }, (_, i) => i + 1).map((p) => (
@@ -55,24 +54,45 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
           ))}
         </div>
       )}
-      {data.episodes.map((e) => (
-        <div key={e.number} role="button" tabIndex={0} onClick={() => onOpenEpisode(season.anime.id, e.number)} onKeyDown={(k) => k.key === 'Enter' && onOpenEpisode(season.anime.id, e.number)} className="flex items-center gap-3 border-b border-divider px-4 py-2.5 last:border-b-0" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 56px' }}>
-          <span className="w-8 shrink-0 text-[13px] font-bold text-ink-3">{e.number}</span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${e.number}`}</span>
-            <span className="block text-[11px] text-ink-3">
-              {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null, (watched.get(epKey(season.anime.id, e.number))?.count ?? 1) > 1 ? `Vu ×${watched.get(epKey(season.anime.id, e.number))!.count}` : null].filter(Boolean).join(' · ')}
+      {data.episodes.map((e) => {
+        const info = watched.get(epKey(season.anime.id, e.number));
+        const unaired = e.number > (season.aired ?? 0);
+        return (
+          <div
+            key={e.number}
+            role="button"
+            tabIndex={0}
+            onClick={() => onOpenEpisode(season.anime.id, e.number)}
+            onKeyDown={(k) => k.key === 'Enter' && onOpenEpisode(season.anime.id, e.number)}
+            className="flex items-center gap-3 border-b border-divider px-4 py-2.5 last:border-b-0"
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 74px' }}
+          >
+            {/* Vignette de l'épisode (AniList) ; à défaut, la bannière / jaquette de la saison. */}
+            <Poster title="" src={e.thumbnail ?? fallback} color={season.anime.color} showTitle={false} className="h-[54px] w-24 shrink-0 rounded-[4px]">
+              <span className="absolute bottom-0 left-0 rounded-tr-[4px] bg-black/70 px-1.5 text-[11px] font-bold leading-[16px] text-white">{e.number}</span>
+            </Poster>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${e.number}`}</span>
+              <span className="block truncate text-[11px] text-ink-3">
+                {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null, (info?.count ?? 1) > 1 ? `Vu ×${info!.count}` : null].filter(Boolean).join(' · ')}
+              </span>
             </span>
-          </span>
-          <div className={e.number > (season.aired ?? 0) ? 'opacity-40' : ''}>
-            <CheckButton
-              checked={watched.has(epKey(season.anime.id, e.number))}
-              onToggle={() => e.number <= (season.aired ?? 0) && toggleEpisode(franchise, season.anime.id, e.number, watched)}
-              size={30}
-            />
+            <div className={unaired ? 'opacity-40' : ''}>
+              <CheckButton checked={!!info} onToggle={() => !unaired && toggleEpisode(franchise, season.anime.id, e.number, watched)} size={30} />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
+    </div>
+  );
+}
+
+function SeasonSynopsis({ text }: { text: string }) {
+  const [more, setMore] = useState(false);
+  return (
+    <div className="border-t border-divider px-4 py-3">
+      <p className={`whitespace-pre-line text-[13px] leading-[19px] text-ink-2 ${more ? '' : 'line-clamp-3'}`}>{text}</p>
+      {text.length > 160 && <button onClick={() => setMore((m) => !m)} className="mt-1 text-[11px] font-bold uppercase text-blue">{more ? 'Réduire' : 'Lire la suite'}</button>}
     </div>
   );
 }
@@ -86,7 +106,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
     for (const s of franchise.seasons) for (const e of airedOf(s)) if (!watched.has(epKey(e.seasonId, e.episode))) return { season: s, episode: e.episode };
     return null;
   }, [franchise, watched]);
-  const nextEps = useSeasonEpisodes(next?.season, Math.ceil((next?.episode ?? 1) / 100));
+  const nextEps = useEpisodeList(franchise, next?.season, Math.ceil((next?.episode ?? 1) / 100), !!next);
   const nextInfo = nextEps.data?.episodes.find((e) => e.number === next?.episode);
 
   const everything = allAired(franchise);
@@ -122,15 +142,24 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
           const isOpen = open === s.anime.id;
           return (
             <div key={s.anime.id} className="shadow-card overflow-hidden rounded-card bg-surface">
-              <div className="flex h-[62px] items-center px-4" role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : s.anime.id)}>
-                <span className="text-[20px] font-bold text-ink">Saison {s.number}</span>
-                <IconChevronDown size={16} className={`ml-2 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                <span className="ml-auto mr-3 text-[14px] font-medium text-ink-3">{done}/{total || '?'}</span>
+              <div className="flex min-h-[62px] items-center px-4 py-2.5" role="button" tabIndex={0} onClick={() => setOpen(isOpen ? null : s.anime.id)}>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center">
+                    <span className="text-[20px] font-bold leading-6 text-ink">Saison {s.number}</span>
+                    <IconChevronDown size={16} className={`ml-2 shrink-0 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </span>
+                  <span className="block truncate text-[12px] font-medium text-ink-3">
+                    {t(s.anime.title)}
+                    {(s.anime.seasonYear ?? s.anime.startDate?.year) ? ` (${s.anime.seasonYear ?? s.anime.startDate?.year})` : ''}
+                  </span>
+                </span>
+                <span className="ml-3 mr-3 text-[14px] font-medium text-ink-3">{done}/{total || '?'}</span>
                 <CheckButton checked={complete} onToggle={() => toggleSeason(franchise, s, watched)} size={34} />
               </div>
               <div className="h-1 w-full bg-progress-track">
                 <motion.div className="h-full bg-green" initial={false} animate={{ width: `${ratio * 100}%` }} transition={{ duration: 0.3 }} />
               </div>
+              {isOpen && s.anime.description && <SeasonSynopsis text={stripHtml(s.anime.description)} />}
               {isOpen && <SeasonEpisodes season={s} franchise={franchise} onOpenEpisode={onOpenEpisode} watched={watched} />}
             </div>
           );

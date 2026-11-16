@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue } from 'framer-motion';
+import { animate, m as motion, useMotionValue } from 'framer-motion';
 import { useEffect, type ReactNode } from 'react';
 import { motion as m } from '../theme';
 

@@ -22,7 +22,7 @@ function SearchResults({ term, onOpen }: { term: string; onOpen: (id: number) =>
       {items.map((a) => (
         <li key={a.id} className="flex items-center gap-3 border-b border-divider">
           <button onClick={() => onOpen(a.id)} className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left">
-            <Poster title={t(a.title)} src={a.coverLarge} color={a.color} showTitle={false} className="shrink-0 rounded-poster" style={{ width: 56, height: 84 }} />
+            <Poster title={t(a.title)} src={a.cover} color={a.color} showTitle={false} className="shrink-0 rounded-poster" style={{ width: 56, height: 84 }} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[15px] font-bold text-ink">{t(a.title)}</span>
               <span className="mt-0.5 block text-[12px] text-ink-3">
@@ -85,7 +85,7 @@ function BrowseView({ onOpen, onBack }: { onOpen: (id: number) => void; onBack: 
           {items.map((a) => (
             <div key={a.id} className="relative">
               <button onClick={() => onOpen(a.id)} aria-label={t(a.title)} className="block w-full">
-                <Poster title={t(a.title)} src={a.coverLarge} color={a.color} className="aspect-[2/3] w-full rounded-poster" />
+                <Poster title={t(a.title)} src={a.cover} color={a.color} className="aspect-[2/3] w-full rounded-poster" />
               </button>
               <QuickFollow animeId={a.id} className="absolute right-1.5 top-1.5" />
             </div>
@@ -128,6 +128,7 @@ export function DiscoverScreen({ onOpenShow }: { onOpenShow: (id: number) => voi
           <>
             <PosterRow title="Animes tendance" items={discover.data?.trending} onOpen={onOpenShow} onTitleClick={() => navigate('/decouvrir/tout')} />
             <PosterRow title="Cette saison" items={discover.data?.season} onOpen={onOpenShow} onTitleClick={() => navigate('/decouvrir/tout')} />
+            <PosterRow title="Prochainement" items={discover.data?.upcoming} onOpen={onOpenShow} onTitleClick={() => navigate('/decouvrir/tout')} />
             <PosterRow title="Les plus populaires" items={discover.data?.popular} onOpen={onOpenShow} onTitleClick={() => navigate('/decouvrir/tout')} />
             {discover.isError && <p className="px-page pt-6 text-center text-[13px] text-ink-3">Impossible de charger la découverte (hors-ligne ?).</p>}
             <div className="px-page pt-6">

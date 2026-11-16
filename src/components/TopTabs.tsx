@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { layout } from '../theme';
 import { motion as m } from '../theme';
 

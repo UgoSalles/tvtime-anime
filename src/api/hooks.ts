@@ -1,8 +1,8 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, searchAnime } from './anilist';
-import { loadSeasonEpisodes, placeholderEpisodes } from './episodes';
+import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, fetchStreamingBatch, searchAnime } from './anilist';
+import { loadSeasonEpisodes, mergeStreaming, placeholderEpisodes } from './episodes';
 import { resolveFranchise } from './franchise';
-import type { FranchiseSeason } from './types';
+import type { Franchise, FranchiseSeason } from './types';
 
 const HOUR = 3_600_000;
 
@@ -41,7 +41,7 @@ export const useFranchise = (id: number | undefined) =>
     queryKey: ['franchise', id],
     queryFn: ({ signal }) => resolveFranchise(id!, signal),
     enabled: id !== undefined,
-    staleTime: 24 * HOUR,
+    staleTime: 6 * HOUR,
     gcTime: 48 * HOUR,
   });
 
@@ -56,10 +56,30 @@ export const useSeasonEpisodes = (season: FranchiseSeason | undefined, page: num
     placeholderData: () => (season ? placeholderEpisodes(season, page) : undefined),
   });
 
-export const useAiring = (ids: number[], days = 30) =>
+/** Vignettes et titres de secours de TOUTES les saisons d'une franchise, en une requête. */
+export const useFranchiseStreaming = (franchise: Franchise | undefined, enabled = true) =>
   useQuery({
-    queryKey: ['airing', [...ids].sort((a, b) => a - b), days],
-    queryFn: ({ signal }) => fetchAiringSchedule(ids, days, signal),
+    queryKey: ['streaming', franchise?.rootId],
+    queryFn: ({ signal }) => fetchStreamingBatch(franchise!.seasons.map((s) => s.anime.id), signal),
+    enabled: enabled && !!franchise,
+    staleTime: 12 * HOUR,
+  });
+
+/**
+ * Liste d'épisodes complète : numéros instantanés → titres/dates (Jikan) → vignettes (AniList), chaque
+ * source arrivant indépendamment.
+ */
+export function useEpisodeList(franchise: Franchise | undefined, season: FranchiseSeason | undefined, page: number, enabled = true) {
+  const eps = useSeasonEpisodes(season, page, enabled);
+  const streaming = useFranchiseStreaming(franchise, enabled);
+  const data = eps.data ? mergeStreaming(eps.data, season ? streaming.data?.[season.anime.id] : undefined) : undefined;
+  return { data, isPlaceholder: eps.isPlaceholderData, thumbsLoading: streaming.isLoading };
+}
+
+export const useAiring = (ids: number[]) =>
+  useQuery({
+    queryKey: ['airing', [...ids].sort((a, b) => a - b)],
+    queryFn: ({ signal }) => fetchAiringSchedule(ids, signal),
     enabled: ids.length > 0,
     staleTime: HOUR,
   });

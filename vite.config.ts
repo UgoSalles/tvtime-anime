@@ -8,6 +8,20 @@ const base = process.env.VITE_BASE ?? '/';
 
 export default defineConfig({
   base,
+  build: {
+    rollupOptions: {
+      output: {
+        // Bibliothèques séparées : mises en cache indépendamment et chargées en parallèle.
+        advancedChunks: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/ },
+            { name: 'motion', test: /node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/ },
+            { name: 'data', test: /node_modules[\\/](dexie|dexie-react-hooks|@tanstack|zustand)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

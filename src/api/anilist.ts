@@ -1,10 +1,11 @@
 import { cachedFetch, TTL } from './cache';
+import { db, type CacheRow } from '../lib/db';
 import { fetchJsonWithRetry, RateLimitedQueue } from './queue';
-import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, Titles } from './types';
+import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, StreamingMap, Titles } from './types';
 
 const ENDPOINT = 'https://graphql.anilist.co';
 // 30 req/min constatées (mode dégradé d'AniList), rafale de 6 : prudent et suffisant avec le cache.
-export const anilistQueue = new RateLimitedQueue(30, 6);
+export const anilistQueue = new RateLimitedQueue(30, 15);
 
 // ── Normalisation ──────────────────────────────────────────────────────────
 interface RawMedia {
@@ -23,6 +24,7 @@ interface RawMedia {
   averageScore?: number | null;
   genres?: string[] | null;
   nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  description?: string | null;
   relations?: { edges: { relationType: string; node: { id: number; format: string | null; type: string } }[] };
 }
 
@@ -45,6 +47,7 @@ export function normalize(m: RawMedia): Anime {
     averageScore: m.averageScore ?? null,
     genres: m.genres ?? [],
     nextAiring: m.nextAiringEpisode ? { episode: m.nextAiringEpisode.episode, airingAt: m.nextAiringEpisode.airingAt } : null,
+    ...(m.description !== undefined ? { description: m.description } : {}),
   };
 }
 
@@ -66,7 +69,7 @@ export async function gql<T>(query: string, variables: Record<string, unknown> =
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ query, variables }),
     },
-    { signal },
+    { signal, retries: 3, networkBackoffMs: 12_000 },
   );
   if (!json.data) throw new Error(json.errors?.[0]?.message ?? 'AniList: réponse vide');
   return json.data;
@@ -88,6 +91,8 @@ export interface DiscoverData {
   trending: Anime[];
   season: Anime[];
   popular: Anime[];
+  /** Annoncés, pas encore sortis. */
+  upcoming: Anime[];
   genres: string[];
 }
 
@@ -98,10 +103,11 @@ export function fetchDiscover(signal?: AbortSignal): Promise<DiscoverData> {
     trending: Page(perPage:20){ media(type:ANIME,sort:TRENDING_DESC,isAdult:false,format_in:${BROWSE_FORMATS}){ ${FIELDS} } }
     season: Page(perPage:20){ media(type:ANIME,season:$season,seasonYear:$year,sort:POPULARITY_DESC,isAdult:false,format_in:${BROWSE_FORMATS}){ ${FIELDS} } }
     popular: Page(perPage:20){ media(type:ANIME,sort:POPULARITY_DESC,isAdult:false,format_in:${BROWSE_FORMATS}){ ${FIELDS} } }
+    upcoming: Page(perPage:20){ media(type:ANIME,status:NOT_YET_RELEASED,sort:POPULARITY_DESC,isAdult:false,format_in:${BROWSE_FORMATS}){ ${FIELDS} } }
     GenreCollection
   }`;
   return cached(
-    `discover:${season}:${year}`,
+    `discover2:${season}:${year}`,
     TTL.list,
     q,
     { season, year },
@@ -109,6 +115,7 @@ export function fetchDiscover(signal?: AbortSignal): Promise<DiscoverData> {
       trending: d.trending.media.map(normalize),
       season: d.season.media.map(normalize),
       popular: d.popular.media.map(normalize),
+      upcoming: d.upcoming.media.map(normalize),
       genres: (d.GenreCollection as string[]).filter((g) => g !== 'Hentai'),
     }),
     signal,
@@ -199,6 +206,7 @@ export interface FranchiseNode {
 export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): Promise<FranchiseNode[]> {
   const q = `query($ids:[Int]){ Page(perPage:50){ media(id_in:$ids,type:ANIME){
     ${FIELDS}
+    description(asHtml:false)
     relations{ edges{ relationType node{ id type } } }
   } } }`;
   const raw: RawMedia[] = (await gql<{ Page: { media: RawMedia[] } }>(q, { ids }, signal)).Page.media;
@@ -211,14 +219,62 @@ export async function fetchFranchiseNodes(ids: number[], signal?: AbortSignal): 
 }
 
 // ── Calendrier ─────────────────────────────────────────────────────────────
-/** Épisodes à venir des médias donnés, dans les `days` prochains jours. */
-export function fetchAiringSchedule(mediaIds: number[], days = 30, signal?: AbortSignal): Promise<AiringEntry[]> {
-  const now = Math.floor(Date.now() / 1000);
-  const to = now + days * 86400;
-  const q = `query($ids:[Int],$from:Int,$to:Int){ Page(perPage:50){ airingSchedules(mediaId_in:$ids,airingAt_greater:$from,airingAt_lesser:$to,sort:TIME){ mediaId episode airingAt } } }`;
-  // La clé arrondit l'heure courante pour que le cache serve vraiment.
-  const key = `airing:${[...mediaIds].sort((a, b) => a - b).join(',')}:${days}:${Math.floor(now / 3600)}`;
-  return cached(key, TTL.airing, q, { ids: mediaIds, from: now, to }, (d) => d.Page.airingSchedules as AiringEntry[], signal);
+/**
+ * TOUS les épisodes programmés (pas encore diffusés) des médias donnés, jusqu'à la fin de ce qu'AniList
+ * a planifié — plus de fenêtre de 30 jours. Paginé par 50.
+ */
+export function fetchAiringSchedule(mediaIds: number[], signal?: AbortSignal): Promise<AiringEntry[]> {
+  const q = `query($ids:[Int],$p:Int){ Page(page:$p,perPage:50){ pageInfo{ hasNextPage } airingSchedules(mediaId_in:$ids,notYetAired:true,sort:TIME){ mediaId episode airingAt } } }`;
+  // La clé arrondit l'heure courante pour que le cache serve vraiment pendant l'heure.
+  const key = `airing2:${[...mediaIds].sort((a, b) => a - b).join(',')}:${Math.floor(Date.now() / 3_600_000)}`;
+  return cachedFetch(key, TTL.airing, async () => {
+    const out: AiringEntry[] = [];
+    for (let page = 1; page <= 8; page++) {
+      const d = await gql<{ Page: { pageInfo: { hasNextPage: boolean }; airingSchedules: AiringEntry[] } }>(q, { ids: mediaIds, p: page }, signal);
+      out.push(...d.Page.airingSchedules);
+      if (!d.Page.pageInfo.hasNextPage) break;
+    }
+    return out;
+  });
+}
+
+/**
+ * Titres + vignettes d'épisodes (AniList `streamingEpisodes`) de plusieurs saisons en UNE requête.
+ * Chaque saison est mise en cache séparément ; seules les manquantes sont demandées.
+ */
+export async function fetchStreamingBatch(ids: number[], signal?: AbortSignal): Promise<StreamingMap> {
+  const out: StreamingMap = {};
+  const rows = await db.apiCache.bulkGet(ids.map((id) => `stream:${id}`)).catch(() => [] as (CacheRow | undefined)[]);
+  const missing: number[] = [];
+  ids.forEach((id, i) => {
+    const r = rows[i];
+    if (r && Date.now() - r.fetchedAt < TTL.detail) out[id] = r.value as StreamingMap[number];
+    else missing.push(id);
+  });
+  if (missing.length) {
+    try {
+      const d = await gql<{ Page: { media: { id: number; streamingEpisodes: { title: string; thumbnail: string | null }[] | null }[] } }>(
+        `query($ids:[Int]){ Page(perPage:50){ media(id_in:$ids,type:ANIME){ id streamingEpisodes{ title thumbnail } } } }`,
+        { ids: missing },
+        signal,
+      );
+      const now = Date.now();
+      const puts: CacheRow[] = [];
+      for (const m of d.Page.media) {
+        const list = (m.streamingEpisodes ?? []).map((e) => ({ title: e.title, thumbnail: e.thumbnail ?? null }));
+        out[m.id] = list;
+        puts.push({ key: `stream:${m.id}`, value: list, fetchedAt: now });
+      }
+      db.apiCache.bulkPut(puts).catch(() => undefined);
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      // réseau KO : on se rabat sur d'éventuelles valeurs périmées
+      ids.forEach((id, i) => {
+        if (!out[id] && rows[i]) out[id] = rows[i]!.value as StreamingMap[number];
+      });
+    }
+  }
+  return out;
 }
 
 // ── Import ─────────────────────────────────────────────────────────────────
@@ -256,16 +312,4 @@ export async function fetchAniListUserList(userName: string, signal?: AbortSigna
     for (const e of l.entries)
       seen.set(e.media.id, { mediaId: e.media.id, status: e.status, progress: e.progress ?? 0, title: e.media.title.english || e.media.title.romaji || String(e.media.id) });
   return [...seen.values()];
-}
-
-/** Titres / vignettes d'épisodes d'AniList (secours quand Jikan est indisponible) : requête légère, mise en cache. */
-export function fetchStreamingEpisodes(id: number, signal?: AbortSignal): Promise<{ title: string; thumbnail: string | null }[]> {
-  return cached(
-    `stream:${id}`,
-    TTL.detail,
-    `query($id:Int){ Media(id:$id,type:ANIME){ streamingEpisodes{ title thumbnail } } }`,
-    { id },
-    (d) => (d.Media.streamingEpisodes ?? []).map((e: { title: string; thumbnail: string | null }) => ({ title: e.title, thumbnail: e.thumbnail ?? null })),
-    signal,
-  );
 }

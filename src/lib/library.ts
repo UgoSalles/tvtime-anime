@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
-import { resolveFranchise } from '../api/franchise';
+import { createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { loadLibraryFranchises } from '../api/library';
 import type { Franchise, FranchiseSeason } from '../api/types';
 import { useAllWatched, useFollows } from '../db/hooks';
 import type { FollowRow } from './db';
@@ -60,19 +60,22 @@ export function computeShowState(follow: FollowRow, franchise: Franchise | undef
   };
 }
 
-/** Toute la bibliothèque : suivis (Dexie, live) + franchises (cache AniList) + progression. */
-export function useLibrary() {
+/** Calcul de la bibliothèque : suivis (Dexie, live) + franchises (cache AniList) + progression. */
+function useLibraryCompute() {
   const follows = useFollows();
   const watched = useAllWatched();
-  const results = useQueries({
-    queries: (follows ?? []).map((f) => ({
-      queryKey: ['franchise', f.showId],
-      queryFn: ({ signal }: { signal: AbortSignal }) => resolveFranchise(f.showId, signal),
-      staleTime: 24 * 3_600_000,
-      gcTime: 48 * 3_600_000,
-    })),
+  const qc = useQueryClient();
+  // Une seule requête pour toutes les franchises (cache d'abord, lot AniList ensuite).
+  const followKey = (follows ?? []).map((f) => `${f.showId}:${f.ids.length}`).join(',');
+  const franchisesQ = useQuery({
+    queryKey: ['library-franchises', followKey],
+    queryFn: ({ signal }) => loadLibraryFranchises(follows!, () => void qc.invalidateQueries({ queryKey: ['library-franchises'] }), signal),
+    enabled: follows !== undefined,
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
   });
-  const stamp = results.map((r) => r.dataUpdatedAt).join();
+  const franchiseMap = franchisesQ.data;
+  const stamp = String(franchisesQ.dataUpdatedAt);
 
   return useMemo(() => {
     const bySeason = new Map<number, Set<number>>();
@@ -81,18 +84,41 @@ export function useLibrary() {
       s.add(w.episode);
       bySeason.set(w.seasonId, s);
     }
-    const shows = (follows ?? []).map((f, i) => computeShowState(f, results[i]?.data, bySeason));
-    const franchises = new Map<number, Franchise>();
-    results.forEach((r, i) => r.data && franchises.set(follows![i]!.showId, r.data));
+    const shows = (follows ?? []).map((f) => computeShowState(f, franchiseMap?.get(f.showId), bySeason));
+    const franchises = new Map<number, Franchise>(franchiseMap ?? []);
+    // Tout id AniList (n'importe quelle saison) → suivi : recherche O(1) pour les boutons « + » des listes.
+    const followByAnimeId = new Map<number, FollowRow>();
+    follows?.forEach((f) => f.ids.forEach((id) => followByAnimeId.set(id, f)));
     return {
       shows,
       franchises,
+      followByAnimeId: follows ? followByAnimeId : undefined,
       watched: watched ?? [],
       ready: follows !== undefined && watched !== undefined,
-      pending: results.filter((r) => r.isLoading).length,
+      pending: franchisesQ.isLoading ? (follows?.length ?? 0) : 0,
+      error: franchisesQ.isError && !franchisesQ.data,
+      retry: () => void franchisesQ.refetch(),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [follows, watched, stamp]);
+  }, [follows, watched, stamp, franchisesQ.isLoading, franchisesQ.isError]);
+}
+
+export type Library = ReturnType<typeof useLibraryCompute>;
+const LibraryContext = createContext<Library | null>(null);
+
+/**
+ * UNE seule instance du calcul pour toute l'app (avant : une par écran, soit autant de requêtes Dexie,
+ * de recalculs et de rendus à chaque coche).
+ */
+export function LibraryProvider({ children }: { children: ReactNode }) {
+  const lib = useLibraryCompute();
+  return createElement(LibraryContext.Provider, { value: lib }, children);
+}
+
+export function useLibrary(): Library {
+  const lib = useContext(LibraryContext);
+  if (!lib) throw new Error('useLibrary hors de <LibraryProvider>');
+  return lib;
 }
 
 // ── Statistiques ───────────────────────────────────────────────────────────

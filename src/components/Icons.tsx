@@ -83,3 +83,9 @@ export const IconStar = ({ size, ...p }: P) => (
     <path d="m12 2.8 2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" />
   </svg>
 );
+export const IconRefresh = ({ size, ...p }: P) => (
+  <svg {...base(size, p)}>
+    <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+    <path d="M20 4v5h-5" />
+  </svg>
+);

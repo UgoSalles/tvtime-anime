@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { IconPlus } from '../components/Icons';
 import { Poster } from '../components/Poster';
-import { SettingsView } from './SettingsView';
-import { LibraryView, ListView } from './ProfileViews';
-import { ImportView } from './ImportView';
+const SettingsView = lazy(() => import('./SettingsView').then((m) => ({ default: m.SettingsView })));
+const LibraryView = lazy(() => import('./ProfileViews').then((m) => ({ default: m.LibraryView })));
+const ListView = lazy(() => import('./ProfileViews').then((m) => ({ default: m.ListView })));
+const ImportView = lazy(() => import('./ImportView').then((m) => ({ default: m.ImportView })));
 import { useLists } from '../db/hooks';
 import { createList, toggleFavorite } from '../db/repo';
 import { computeStats, useLibrary } from '../lib/library';
@@ -46,10 +47,12 @@ export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: number) => void
   const series = useMemo(() => [...lib.shows].sort((a, b) => (b.follow.lastWatchedAt ?? b.follow.addedAt) - (a.follow.lastWatchedAt ?? a.follow.addedAt)).slice(0, 12), [lib.shows]);
   const favorites = lib.shows.filter((s) => s.follow.favorite);
 
-  if (settings) return <SettingsView onBack={() => navigate(-1)} />;
-  if (importing) return <ImportView onBack={() => navigate(-1)} />;
-  if (library) return <LibraryView onBack={() => navigate(-1)} onOpenShow={onOpenShow} />;
-  if (listMatch?.params.id) return <ListView listId={Number(listMatch.params.id)} onBack={() => navigate(-1)} onOpenShow={onOpenShow} />;
+  if (settings || importing || library || listMatch?.params.id)
+    return (
+      <Suspense fallback={<div className="h-full bg-surface" />}>
+        {settings ? <SettingsView onBack={() => navigate(-1)} /> : importing ? <ImportView onBack={() => navigate(-1)} /> : library ? <LibraryView onBack={() => navigate(-1)} onOpenShow={onOpenShow} /> : <ListView listId={Number(listMatch!.params.id)} onBack={() => navigate(-1)} onOpenShow={onOpenShow} />}
+      </Suspense>
+    );
 
   const pickFavorite = () => {
     const candidates = lib.shows.filter((s) => !s.follow.favorite).slice(0, 12);

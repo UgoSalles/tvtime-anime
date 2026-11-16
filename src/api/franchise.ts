@@ -46,7 +46,7 @@ export function buildFranchise(rootId: number, nodes: FranchiseNode[]): Franchis
 }
 
 export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Franchise> {
-  return cachedFetch(`franchise2:${id}`, TTL.franchise, async () => {
+  return cachedFetch(`franchise3:${id}`, TTL.franchise, async () => {
     const known = new Map<number, FranchiseNode>();
     const seen = new Set<number>([id]);
     let frontier = [id];
@@ -62,7 +62,7 @@ export function resolveFranchise(id: number, signal?: AbortSignal): Promise<Fran
     // La même franchise répond pour chacun de ses membres (évite de refaire le parcours).
     const now = Date.now();
     db.apiCache
-      .bulkPut(franchise.ids.map((m) => ({ key: `franchise2:${m}`, value: franchise, fetchedAt: now })))
+      .bulkPut(franchise.ids.map((m) => ({ key: `franchise3:${m}`, value: franchise, fetchedAt: now })))
       .catch(() => undefined);
     return franchise;
   });

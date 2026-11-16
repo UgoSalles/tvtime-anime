@@ -1,10 +1,11 @@
 import { Fragment, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { TopTabs } from '../components/TopTabs';
 import { SectionChip } from '../components/Chips';
 import { EpisodeCard, type EpisodeCardModel } from '../components/EpisodeCard';
-import { IconGrid } from '../components/Icons';
+import { IconGrid, IconRefresh } from '../components/Icons';
 import { useAiring, useSeasonEpisodes } from '../api/hooks';
 import type { Franchise } from '../api/types';
 import { markEpisodes, epKey } from '../db/repo';
@@ -12,6 +13,8 @@ import { toggleEpisode } from '../db/actions';
 import type { WatchMap } from '../db/hooks';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { useLibrary, type ShowState } from '../lib/library';
+import { buildUpcoming, upcomingSeasons, type UpcomingKind } from '../lib/upcoming';
+import { db } from '../lib/db';
 import { useUi, type ShowsTab } from '../store/ui';
 import { layout } from '../theme';
 
@@ -118,6 +121,13 @@ function Watchlist({ scrollRef, ...nav }: { scrollRef: React.RefObject<HTMLDivEl
           );
         })}
       </div>
+      {lib.error && (
+        <div className="px-8 pt-24 text-center">
+          <p className="text-[14px] font-bold text-ink">Chargement impossible</p>
+          <p className="mt-2 text-[12px] text-ink-3">AniList limite le nombre de requêtes ou le réseau est coupé. Réessaie dans une minute.</p>
+          <button onClick={lib.retry} className="mt-4 h-10 rounded-card bg-yellow px-5 text-[12px] font-extrabold uppercase tracking-wider text-black">Réessayer</button>
+        </div>
+      )}
       {lib.pending > 0 && (
         <div className="flex flex-col px-page" style={{ gap: layout.episodeCardGap }}>
           {Array.from({ length: Math.min(lib.pending, 3) }, (_, i) => <Skeleton key={i} />)}
@@ -130,71 +140,77 @@ function Watchlist({ scrollRef, ...nav }: { scrollRef: React.RefObject<HTMLDivEl
   );
 }
 
-const dayKey = (ts: number) => new Date(ts * 1000).toDateString();
-const dayLabel = (ts: number) => new Date(ts * 1000).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+const dayKey = (ms: number) => new Date(ms).toDateString();
+const dayLabel = (ms: number) => new Date(ms).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+const HINT: Record<UpcomingKind, string | null> = { scheduled: null, estimated: 'Sortie estimée', announced: 'Nouvelle saison · date annoncée' };
 
 function Upcoming(nav: Nav) {
   const showTitle = useShowTitle();
   const lib = useLibrary();
+  const qc = useQueryClient();
   const watched = useMemo<WatchMap>(() => new Map(lib.watched.map((w) => [epKey(w.seasonId, w.episode), { at: w.watchedAt, count: w.count ?? 1 }])), [lib.watched]);
 
-  // mediaId → (franchise, saison) des séries actives encore en diffusion / annoncées.
-  const lookup = useMemo(() => {
-    const m = new Map<number, { f: Franchise; seasonIdx: number }>();
-    lib.shows.forEach((s) => {
-      if (s.follow.status !== 'active' || !s.franchise) return;
-      s.franchise.seasons.forEach((se, i) => (se.anime.status === 'RELEASING' || se.anime.status === 'NOT_YET_RELEASED') && m.set(se.anime.id, { f: s.franchise!, seasonIdx: i }));
-    });
-    return m;
-  }, [lib.shows]);
+  const lookup = useMemo(() => upcomingSeasons(lib.shows), [lib.shows]);
   const ids = useMemo(() => [...lookup.keys()], [lookup]);
-  const airing = useAiring(ids, 30);
+  const airing = useAiring(ids);
 
-  const groups = useMemo(() => {
-    const g = new Map<string, { label: string; items: { model: EpisodeCardModel; f: Franchise; airingAt: number }[] }>();
-    for (const a of airing.data ?? []) {
-      const hit = lookup.get(a.mediaId);
-      if (!hit) continue;
-      const season = hit.f.seasons[hit.seasonIdx]!;
-      const k = dayKey(a.airingAt);
-      const grp = g.get(k) ?? { label: dayLabel(a.airingAt), items: [] };
+  const { groups, undated } = useMemo(() => {
+    const { dated, undated } = buildUpcoming(lookup, airing.data ?? []);
+    const g = new Map<string, { label: string; items: { model: EpisodeCardModel; f: Franchise; at: number }[] }>();
+    for (const it of dated) {
+      const k = dayKey(it.at);
+      const grp = g.get(k) ?? { label: dayLabel(it.at), items: [] };
       grp.items.push({
-        f: hit.f,
-        airingAt: a.airingAt,
+        f: it.f,
+        at: it.at,
         model: {
-          key: `${a.mediaId}-${a.episode}`,
-          showId: hit.f.rootId,
-          seasonId: a.mediaId,
-          showTitle: showTitle(hit.f),
-          poster: season.anime.coverLarge,
-          color: season.anime.color,
-          season: season.number,
-          episode: a.episode,
-          isNew: a.episode === 1,
-          title: null,
+          key: it.key,
+          showId: it.f.rootId,
+          seasonId: it.season.anime.id,
+          showTitle: showTitle(it.f),
+          poster: it.season.anime.coverLarge,
+          color: it.season.anime.color,
+          season: it.season.number,
+          episode: it.episode,
+          isNew: it.episode === 1,
+          title: HINT[it.kind],
         },
       });
       g.set(k, grp);
     }
-    return [...g.values()];
+    return { groups: [...g.values()], undated };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [airing.data, lookup]);
 
   const loading = !lib.ready || lib.pending > 0 || (ids.length > 0 && airing.isLoading);
+  const refreshing = airing.isFetching || qc.isFetching({ queryKey: ['franchise'] }) > 0;
+  // Actualiser = jeter le cache du calendrier et des franchises suivies (nouvelles saisons annoncées) puis recharger.
+  const refresh = async () => {
+    const keys = (await db.apiCache.toCollection().primaryKeys()).filter((k) => /^(airing2|franchise3):/.test(String(k)));
+    await db.apiCache.bulkDelete(keys);
+    await qc.invalidateQueries({ queryKey: ['franchise'] });
+    await qc.invalidateQueries({ queryKey: ['airing'] });
+  };
+
   return (
     <div className="pb-4">
-      <div className="flex h-[44px] items-center justify-end px-page"><IconGrid size={24} /></div>
+      <div className="flex h-[44px] items-center justify-between px-page">
+        <button aria-label="Actualiser le calendrier" onClick={refresh} className={`grid h-8 w-8 place-items-center text-ink ${refreshing ? 'animate-spin' : ''}`}>
+          <IconRefresh size={22} />
+        </button>
+        <IconGrid size={24} />
+      </div>
       {groups.map((g) => (
         <Fragment key={g.label}>
           <div className="flex h-[44px] items-center justify-center"><SectionChip>{g.label}</SectionChip></div>
           <div className="flex flex-col px-page" style={{ gap: 12 }}>
-            {g.items.map(({ model, f, airingAt }) => (
+            {g.items.map(({ model, f, at }) => (
               <EpisodeCard
                 key={model.key}
                 ep={model}
                 compact
                 {...nav}
-                locked={airingAt * 1000 > Date.now()}
+                locked={at > Date.now()}
                 checked={watched.has(epKey(model.seasonId, model.episode))}
                 onCheck={() => toggleEpisode(f, model.seasonId, model.episode, watched)}
               />
@@ -202,10 +218,41 @@ function Upcoming(nav: Nav) {
           </div>
         </Fragment>
       ))}
+      {undated.length > 0 && (
+        <>
+          <div className="mt-2 flex h-[44px] items-center justify-center"><SectionChip>Prochainement</SectionChip></div>
+          <div className="flex flex-col px-page" style={{ gap: 12 }}>
+            {undated.map((u) => (
+              <EpisodeCard
+                key={u.key}
+                compact
+                {...nav}
+                locked
+                checked={false}
+                onCheck={() => undefined}
+                ep={{
+                  key: u.key,
+                  showId: u.f.rootId,
+                  seasonId: u.season.anime.id,
+                  showTitle: showTitle(u.f),
+                  poster: u.season.anime.coverLarge,
+                  color: u.season.anime.color,
+                  season: u.season.number,
+                  episode: 1,
+                  isNew: true,
+                  title: `Nouvelle saison · ${u.label}`,
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
       {loading && (
         <div className="flex flex-col px-page pt-3" style={{ gap: 12 }}><Skeleton compact /><Skeleton compact /></div>
       )}
-      {!loading && groups.length === 0 && <p className="px-8 py-24 text-center text-[13px] text-ink-3">Aucun épisode à venir dans les 30 prochains jours pour les animes que tu suis.</p>}
+      {!loading && groups.length === 0 && undated.length === 0 && (
+        <p className="px-8 py-24 text-center text-[13px] text-ink-3">Aucun épisode programmé pour les animes que tu suis.</p>
+      )}
     </div>
   );
 }

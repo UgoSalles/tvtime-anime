@@ -1,4 +1,3 @@
-import { fetchStreamingEpisodes } from './anilist';
 import { fetchJikanEpisodes } from './jikan';
 import type { EpisodeInfo, FranchiseSeason } from './types';
 
@@ -44,37 +43,35 @@ export function placeholderEpisodes(season: FranchiseSeason, page: number): Seas
 }
 
 /**
- * Une page (100 épisodes) d'une saison enrichie : titres + dates depuis Jikan (rapide, un seul appel) ;
- * seulement si Jikan échoue, titres + vignettes depuis AniList (une requête légère).
+ * Une page (100 épisodes) enrichie par Jikan (titres + dates) : UN seul appel, rapide.
+ * Les vignettes et titres de secours d'AniList viennent à part (`fetchStreamingBatch`, un lot par franchise)
+ * pour que Jikan n'attende jamais la file d'AniList.
  */
 export async function loadSeasonEpisodes(season: FranchiseSeason, page: number, signal?: AbortSignal): Promise<SeasonEpisodes> {
   const base = placeholderEpisodes(season, page);
   const a = season.anime;
   const byNumber = new Map<number, EpisodeInfo>();
-
-  let jikanOk = false;
   if (a.idMal) {
     try {
       (await fetchJikanEpisodes(a.idMal, page, signal)).episodes.forEach((e) => byNumber.set(e.number, e));
-      jikanOk = byNumber.size > 0;
     } catch (e) {
       if (signal?.aborted) throw e;
     }
   }
-
-  let streaming = new Map<number, { title: string; thumbnail: string | null }>();
-  if (!jikanOk) {
-    try {
-      streaming = parseStreaming(await fetchStreamingEpisodes(a.id, signal));
-    } catch (e) {
-      if (signal?.aborted) throw e;
-    }
-  }
-
   const episodes = base.episodes.map((e) => {
     const j = byNumber.get(e.number);
-    const st = streaming.get(e.number);
-    return { ...e, title: j?.title ?? st?.title ?? null, aired: j?.aired ?? e.aired, filler: j?.filler, recap: j?.recap, thumbnail: st?.thumbnail ?? null };
+    return j ? { ...e, title: j.title ?? null, aired: j.aired ?? e.aired, filler: j.filler, recap: j.recap } : e;
   });
-  return { ...base, episodes, degraded: !jikanOk && streaming.size === 0 };
+  return { ...base, episodes, degraded: byNumber.size === 0 };
+}
+
+/** Complète une liste avec les titres de secours et les vignettes d'AniList. */
+export function mergeStreaming(list: SeasonEpisodes, streaming: { title: string; thumbnail: string | null }[] | undefined): SeasonEpisodes {
+  if (!streaming?.length) return list;
+  const m = parseStreaming(streaming);
+  const episodes = list.episodes.map((e) => {
+    const st = m.get(e.number);
+    return st ? { ...e, title: e.title ?? st.title, thumbnail: st.thumbnail } : e;
+  });
+  return { ...list, episodes, degraded: list.degraded && !episodes.some((e) => e.title) };
 }

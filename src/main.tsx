@@ -10,6 +10,7 @@ import '@fontsource/montserrat/800.css';
 import './index.css';
 import { ThemeProvider } from './lib/ThemeProvider';
 import { App } from './App';
+import { LibraryProvider } from './lib/library';
 
 // networkMode « always » : les requêtes passent par notre cache IndexedDB, qui sait répondre hors-ligne
 // (sinon React Query suspend tout tant que navigator.onLine est faux).
@@ -23,7 +24,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <App />
+          <LibraryProvider>
+            <App />
+          </LibraryProvider>
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

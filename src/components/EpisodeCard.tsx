@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { CheckButton } from './CheckButton';
 import { Badge, ShowPill } from './Chips';
 import { Poster } from './Poster';
