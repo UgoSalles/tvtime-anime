@@ -6,6 +6,8 @@ Les données (AniList) sont gratuites ; tes suivis restent **sur ton téléphone
 
 ## Pour mes amis : installer l'app sur iPhone
 
+**Lien de l'app : https://ugosalles.github.io/tvtime-anime/**
+
 > Il faut **Safari** (pas Chrome ni l'app d'un autre navigateur) et iOS 16.4 ou plus récent.
 
 1. Ouvre le lien de l'app dans **Safari**.
@@ -37,7 +39,11 @@ node scripts/gen-icons.mjs   # régénère icônes et écrans de lancement iOS
 
 Les PWA exigent **HTTPS** : développement local sur `localhost` uniquement, puis déploiement ci-dessous.
 
-### Cloudflare Pages
+### GitHub Pages (en place)
+Chaque `git push` sur `main` lance `.github/workflows/deploy.yml` : build avec `VITE_BASE=/tvtime-anime/`, copie `404.html` (routes profondes), puis publication sur
+https://ugosalles.github.io/tvtime-anime/ . Pour tester le build avec ce sous-chemin en local : `VITE_BASE=/tvtime-anime/ npm run build && npm run preview`.
+
+### Cloudflare Pages (autre option)
 1. *Workers & Pages → Create → Pages → Connect to Git* (ou *Direct Upload* du dossier `dist/`).
 2. Build command : `npm run build` · Output directory : `dist`.
 3. `public/_redirects` et `public/_headers` gèrent la redirection SPA et le cache du service worker.
