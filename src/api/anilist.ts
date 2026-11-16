@@ -1,6 +1,6 @@
 import { cachedFetch, TTL } from './cache';
 import { fetchJsonWithRetry, RateLimitedQueue } from './queue';
-import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason } from './types';
+import type { AiringEntry, Anime, AnimeDetail, FuzzyDate, MediaSeason, Titles } from './types';
 
 const ENDPOINT = 'https://graphql.anilist.co';
 // 30 req/min constatées (mode dégradé d'AniList), rafale de 6 : prudent et suffisant avec le cache.
@@ -57,7 +57,7 @@ const FIELDS = `
 `;
 
 // ── Transport ──────────────────────────────────────────────────────────────
-async function gql<T>(query: string, variables: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
+export async function gql<T>(query: string, variables: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
   const json = await fetchJsonWithRetry<{ data?: T; errors?: { message: string }[] }>(
     anilistQueue,
     ENDPOINT,
@@ -219,4 +219,41 @@ export function fetchAiringSchedule(mediaIds: number[], days = 30, signal?: Abor
   // La clé arrondit l'heure courante pour que le cache serve vraiment.
   const key = `airing:${[...mediaIds].sort((a, b) => a - b).join(',')}:${days}:${Math.floor(now / 3600)}`;
   return cached(key, TTL.airing, q, { ids: mediaIds, from: now, to }, (d) => d.Page.airingSchedules as AiringEntry[], signal);
+}
+
+// ── Import ─────────────────────────────────────────────────────────────────
+/** MAL → AniList (50 ids par requête). Renvoie idMal → id AniList. */
+export async function fetchAnilistIdsByMal(malIds: number[], signal?: AbortSignal): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  for (let i = 0; i < malIds.length; i += 50) {
+    const chunk = malIds.slice(i, i + 50);
+    const d = await gql<{ Page: { media: { id: number; idMal: number }[] } }>(
+      `query($ids:[Int]){ Page(perPage:50){ media(idMal_in:$ids,type:ANIME){ id idMal } } }`,
+      { ids: chunk },
+      signal,
+    );
+    d.Page.media.forEach((m) => out.set(m.idMal, m.id));
+  }
+  return out;
+}
+
+export interface AniListUserEntry {
+  mediaId: number;
+  status: 'CURRENT' | 'PLANNING' | 'COMPLETED' | 'DROPPED' | 'PAUSED' | 'REPEATING';
+  progress: number;
+  title: string;
+}
+
+/** Liste ANIME publique d'un utilisateur AniList (sans clé d'API). */
+export async function fetchAniListUserList(userName: string, signal?: AbortSignal): Promise<AniListUserEntry[]> {
+  const d = await gql<{ MediaListCollection: { lists: { entries: { status: AniListUserEntry['status']; progress: number; media: { id: number; title: Titles } }[] }[] } }>(
+    `query($n:String){ MediaListCollection(userName:$n,type:ANIME){ lists{ entries{ status progress media{ id title{ romaji english } } } } } }`,
+    { n: userName },
+    signal,
+  );
+  const seen = new Map<number, AniListUserEntry>();
+  for (const l of d.MediaListCollection.lists)
+    for (const e of l.entries)
+      seen.set(e.media.id, { mediaId: e.media.id, status: e.status, progress: e.progress ?? 0, title: e.media.title.english || e.media.title.romaji || String(e.media.id) });
+  return [...seen.values()];
 }

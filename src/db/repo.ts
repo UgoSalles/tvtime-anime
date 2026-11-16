@@ -80,6 +80,22 @@ export async function markEpisodes(f: Franchise, eps: EpRef[], watched: boolean)
   });
 }
 
+/** Import : ajoute des épisodes vus avec leur date d'origine, sans écraser l'existant. */
+export async function importWatched(f: Franchise, rows: { seasonId: number; episode: number; at: number }[]): Promise<number> {
+  const follow = await ensureFollow(f);
+  if (!rows.length) return 0;
+  let added = 0;
+  await db.transaction('rw', db.watched, db.follows, async () => {
+    const existing = new Set((await db.watched.where('showId').equals(f.rootId).toArray()).map((w) => epKey(w.seasonId, w.episode)));
+    const fresh = rows.filter((r, i) => !existing.has(epKey(r.seasonId, r.episode)) && rows.findIndex((x) => x.seasonId === r.seasonId && x.episode === r.episode) === i);
+    await db.watched.bulkPut(fresh.map((r) => ({ seasonId: r.seasonId, episode: r.episode, showId: f.rootId, watchedAt: r.at })));
+    added = fresh.length;
+    const latest = Math.max(follow.lastWatchedAt ?? 0, ...rows.map((r) => r.at));
+    if (added) await db.follows.update(f.rootId, { lastWatchedAt: latest });
+  });
+  return added;
+}
+
 // ── Réactions (note, émotion, personnage préféré) ──────────────────────────
 export async function setReaction(f: Franchise, seasonId: number, episode: number, patch: Partial<Pick<ReactionRow, 'rating' | 'emotion' | 'characterId'>>) {
   const cur = await db.reactions.get([seasonId, episode]);

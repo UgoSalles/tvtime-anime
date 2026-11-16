@@ -4,6 +4,7 @@ import { IconPlus } from '../components/Icons';
 import { Poster } from '../components/Poster';
 import { SettingsView } from './SettingsView';
 import { LibraryView, ListView } from './ProfileViews';
+import { ImportView } from './ImportView';
 import { useLists } from '../db/hooks';
 import { createList, toggleFavorite } from '../db/repo';
 import { computeStats, useLibrary } from '../lib/library';
@@ -37,6 +38,7 @@ export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: number) => void
   const settings = useMatch('/profil/reglages');
   const library = useMatch('/profil/series');
   const listMatch = useMatch('/profil/listes/:id');
+  const importing = useMatch('/profil/import');
   const lib = useLibrary();
   const lists = useLists();
   const stats = useMemo(() => computeStats(lib), [lib]);
@@ -45,6 +47,7 @@ export function ProfileScreen({ onOpenShow }: { onOpenShow: (id: number) => void
   const favorites = lib.shows.filter((s) => s.follow.favorite);
 
   if (settings) return <SettingsView onBack={() => navigate(-1)} />;
+  if (importing) return <ImportView onBack={() => navigate(-1)} />;
   if (library) return <LibraryView onBack={() => navigate(-1)} onOpenShow={onOpenShow} />;
   if (listMatch?.params.id) return <ListView listId={Number(listMatch.params.id)} onBack={() => navigate(-1)} onOpenShow={onOpenShow} />;
 
