@@ -54,4 +54,4 @@ Le nom est défini dans `src/appConfig.ts`, `index.html` (`<title>` et `apple-mo
 - Données : AniList GraphQL (`src/api/anilist.ts`) et Jikan (`src/api/jikan.ts`), file d'attente à jetons + retry, cache IndexedDB (`src/api/cache.ts`).
 - Franchises : les saisons AniList sont regroupées par relations PREQUEL/SEQUEL (`src/api/franchise.ts`).
 - Données utilisateur : Dexie (`src/lib/db.ts`, `src/db/`).
-- Import / export : `src/io/`. Spécification et captures de référence : `SPEC.md`, `reference/`.
+- Import / export : `src/io/`. Spécification (inventaire des écrans, design tokens relevés) : `SPEC.md`.

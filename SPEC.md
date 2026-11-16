@@ -1,6 +1,6 @@
 # SPEC — Clone de TV Time dédié aux animes (PWA iPhone)
 
-> Phase 1 — état au 2026-11-16. Source : les 10 captures de `reference/`.
+> Phase 1 — état au 2026-11-16. Source : les 10 captures de `reference/` (analysées puis supprimées du projet le 2026-11-16 ; leur contenu est décrit ci-dessous).
 > Légende de fiabilité : ✅ visible sur une capture · 🟡 partiellement visible / déduit · ❓ non couvert → **question posée, rien d'inventé**.
 
 ---
