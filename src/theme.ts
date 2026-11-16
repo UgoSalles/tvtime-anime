@@ -26,8 +26,10 @@ export const brand = {
 export interface ThemeColors {
   /** Fond d'écran derrière les cartes. */
   background: string;
-  /** Cartes, en-têtes de page (zone des onglets supérieurs), feuilles. */
+  /** Cartes, feuilles, fond de la page Profil (clair). */
   surface: string;
+  /** Fond de la zone des onglets supérieurs. Clair : blanc ; sombre : gris de page [M #232323]. */
+  header: string;
   /** Pastilles de section (« A VOIR », date), tuile vide « + ». */
   chip: string;
   chipText: string;
@@ -64,8 +66,9 @@ export interface ThemeColors {
 export const light: ThemeColors = {
   background: '#F4F4F4', // [M] v.jpeg
   surface: '#FFFFFF', // [M]
+  header: '#FFFFFF', // [M]
   chip: '#EEEEEE', // [M] pastille « A VOIR » ; tuile vide #EEEEEC
-  chipText: '#A6A6A6', // [E]
+  chipText: '#7A7A7A', // [E] texte le plus sombre mesuré #646464 (anti-crénelé)
   textPrimary: '#000000', // [M] noir pur
   textSecondary: '#646464', // [E]
   textTertiary: '#A6A6A6', // [E]
@@ -93,6 +96,7 @@ export const light: ThemeColors = {
 export const dark: ThemeColors = {
   background: '#202020', // [M]
   surface: '#000000', // [M] cartes + tab bar
+  header: '#202020', // [M] #232323 sur qx.jpeg
   chip: '#7E7E7E', // [M] pastille de date « JAN 13, 2024 »
   chipText: '#FFFFFF', // [E]
   textPrimary: '#FFFFFF', // [M]
@@ -103,7 +107,7 @@ export const dark: ThemeColors = {
   tabIconActive: '#FFFFFF', // [M]
   tabIconInactive: '#A6A6A6', // [M]
   tabUnderline: '#FFFFFF', // [M] qx.jpeg : soulignement blanc (pas jaune) en sombre
-  badge: brand.yellow, // [M] #FFD533 — badge « NEW » jaune, texte noir
+  badge: '#DADADA', // [?] « PREMIERE » en sombre non visible ; le badge « NEW » jaune [M #FFD533] utilise brand.yellow
   badgeText: '#000000', // [E]
   checkIdleBg: '#F4F4F4', // [M] cercle blanc cassé
   checkIdleIcon: '#4A4A4A', // [E]
@@ -203,13 +207,16 @@ export const layout = {
   episodeCardHeight: 112,
   episodeCardPosterWidth: 124,
   episodeCardGap: 14,
+  /** Variante compacte (À venir, qx.jpeg) : 75 px ≈ 80 pt, poster carré. [E] */
+  upcomingCardHeight: 80,
+  upcomingCardPosterWidth: 80,
   /** Bouton de coche (cercle). [E] ~38 px */
   checkButtonSize: 36,
   /** Pastille de section (« A VOIR »). [E] 70 × 26 px */
   sectionChipHeight: 26,
   /** Hauteur utile de la barre d'onglets basse, hors safe-area. [E] 49 comme iOS. */
   tabBarHeight: 49,
-  tabBarIconSize: 28,
+  tabBarIconSize: 34, // [E] glyphe ~36 px de large sur v.jpeg
   /** Poster de carrousel (Profil). [E] 166 px de large sur 416 → ~158 pt */
   carouselPosterWidth: 158,
   carouselPosterHeight: 236,
@@ -229,8 +236,8 @@ export const safeArea = {
 // ─── Mouvement (valeurs provisoires : aucune vidéo fournie) ─────────────────
 
 export const motion = {
-  /** [?] à valider : transition push iOS. */
-  push: { type: 'spring', stiffness: 380, damping: 40, mass: 1 },
+  /** [?] à valider : courbe de la transition push iOS (cubic-bezier 0.32, 0.72, 0, 1). */
+  push: { type: 'tween', ease: [0.32, 0.72, 0, 1], duration: 0.38 },
   /** [?] coche d'épisode : léger « pop » puis remplissage vert. */
   check: { type: 'spring', stiffness: 500, damping: 22 },
   fast: { duration: 0.15 },

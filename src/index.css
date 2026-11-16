@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-h: 49px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Rendu « appli native » : body figé (pas de rebond), scroll uniquement dans les conteneurs. */
+html {
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--c-background);
+  color: var(--c-text-primary);
+  font-family: 'Montserrat', -apple-system, 'SF Pro Text', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  font: inherit;
+}
+/* Dans @layer base : les utilitaires Tailwind (border, bg…) doivent pouvoir surcharger. */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0 solid transparent;
+    padding: 0;
+    cursor: pointer;
+  }
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+}
+
+.scroll-y {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+.scroll-y::-webkit-scrollbar,
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+.scroll-x {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+/* Les ombres de carte n'existent qu'en thème clair. */
+.shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+/* Écran de bureau : on simule un iPhone pour le développement. */
+@media (min-width: 500px) {
+  #root {
+    max-width: 393px;
+    max-height: 852px;
+    margin: auto;
+    position: relative;
+    overflow: hidden;
+    border-radius: 24px;
+    box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.3);
+  }
+  body {
+    display: grid;
+    place-items: center;
+    position: static;
+    height: 100vh;
+    background: #888;
+  }
+}

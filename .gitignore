@@ -1,3 +1,6 @@
 node_modules
 dist
+dev-dist
+*.tsbuildinfo
 .DS_Store
+.claude/settings.local.json
