@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+
+/** URLs déjà chargées : un poster qui se remonte (navigation, retour) s'affiche aussitôt, sans fondu ni clignotement. */
+const loadedSrcs = new Set<string>();
 
 /**
  * Poster : image AniList chargée en lazy, avec la couleur dominante de la jaquette (`color`) ou un
@@ -24,8 +27,18 @@ export function Poster({
   style?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(() => !!src && loadedSrcs.has(src));
   const [failed, setFailed] = useState(false);
+  const fresh = useRef(!(src && loadedSrcs.has(src))); // fondu seulement pour un premier chargement
+  const img = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    // Image déjà en cache HTTP : complete dès le montage, on évite l'état « invisible ».
+    if (img.current?.complete && img.current.naturalWidth > 0) {
+      if (src) loadedSrcs.add(src);
+      fresh.current = false;
+      setLoaded(true);
+    }
+  }, [src]);
   const bg = color ?? `linear-gradient(155deg, hsl(${hue} 55% 42%), hsl(${(hue + 40) % 360} 60% 22%))`;
   const hasImg = !!src && !failed;
   return (
@@ -35,14 +48,18 @@ export function Poster({
     >
       {hasImg && (
         <img
+          ref={img}
           src={src!}
           alt={title}
           loading="lazy"
           decoding="async"
           draggable={false}
-          onLoad={() => setLoaded(true)}
+          onLoad={() => {
+            if (src) loadedSrcs.add(src);
+            setLoaded(true);
+          }}
           onError={() => setFailed(true)}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-0 h-full w-full object-cover ${fresh.current ? 'transition-opacity duration-300' : ''} ${loaded ? 'opacity-100' : 'opacity-0'}`}
         />
       )}
       {(!hasImg || !loaded) && showTitle !== false && (

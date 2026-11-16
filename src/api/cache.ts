@@ -1,8 +1,13 @@
 import { db, type CacheRow } from '../lib/db';
 
+const refreshing = new Map<string, Promise<unknown>>();
+
 /**
- * Cache agressif (IndexedDB) : renvoie la valeur fraîche si elle existe, sinon appelle le réseau ;
- * en cas d'échec réseau (hors-ligne, quota…), renvoie la valeur périmée plutôt que de planter.
+ * Cache agressif (IndexedDB), « stale-while-revalidate » :
+ * - valeur fraîche → renvoyée telle quelle ;
+ * - valeur périmée → renvoyée IMMÉDIATEMENT (l'écran ne attend pas le réseau) et rafraîchie en arrière-plan,
+ *   la prochaine lecture sera à jour ;
+ * - rien en cache → réseau ; en cas d'échec réseau, on ne plante pas si une valeur périmée existe.
  */
 export async function cachedFetch<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
   let row: CacheRow | undefined;
@@ -12,14 +17,25 @@ export async function cachedFetch<T>(key: string, ttlMs: number, fetcher: () => 
     row = undefined;
   }
   if (row && Date.now() - row.fetchedAt < ttlMs) return row.value as T;
-  try {
-    const value = await fetcher();
-    db.apiCache.put({ key, value, fetchedAt: Date.now() }).catch(() => undefined);
-    return value;
-  } catch (e) {
-    if (row) return row.value as T;
-    throw e;
+
+  const refresh = () => {
+    const running = refreshing.get(key);
+    if (running) return running as Promise<T>;
+    const p = fetcher()
+      .then((value) => {
+        db.apiCache.put({ key, value, fetchedAt: Date.now() }).catch(() => undefined);
+        return value;
+      })
+      .finally(() => refreshing.delete(key));
+    refreshing.set(key, p);
+    return p;
+  };
+
+  if (row) {
+    refresh().catch(() => undefined); // arrière-plan : une erreur ici n'est pas gênante
+    return row.value as T;
   }
+  return refresh();
 }
 
 export const TTL = {

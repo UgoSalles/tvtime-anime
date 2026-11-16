@@ -10,9 +10,9 @@ import { EPISODES_PER_PAGE } from '../api/episodes';
 import type { AnimeDetail, Franchise, FranchiseSeason } from '../api/types';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { layout } from '../theme';
-import { useFollowOf, useListsOfShow, useLists, useWatchedMap } from '../db/hooks';
+import { useFollowOf, useListsOfShow, useLists, useWatchedMap, type WatchMap } from '../db/hooks';
 import { addToList, allAired, airedOf, createList, ensureFollow, epKey, markEpisodes, removeFromList, setDropped, toggleFavorite, unfollow } from '../db/repo';
-import { toggleEpisode } from '../db/actions';
+import { toggleAll, toggleEpisode, toggleSeason } from '../db/actions';
 import { openActions, useSheet } from '../store/sheet';
 
 type Tab = 'about' | 'episodes';
@@ -34,17 +34,17 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   season: FranchiseSeason;
   franchise: Franchise;
   onOpenEpisode: (seasonId: number, ep: number) => void;
-  watched: Map<string, number>;
+  watched: WatchMap;
 }) {
   const [page, setPage] = useState(1);
   const q = useSeasonEpisodes(season, page);
-  if (q.isLoading) return <div className="space-y-px px-4 py-3">{Array.from({ length: 4 }, (_, i) => <div key={i} className="h-12 animate-pulse rounded bg-chip" />)}</div>;
   const data = q.data;
   if (!data) return <p className="px-4 py-4 text-[13px] text-ink-3">Épisodes indisponibles (hors-ligne ?).</p>;
   return (
     <div className="border-t border-divider">
-      {data.degraded && (
-        <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Dates des épisodes indisponibles pour le moment ; titres issus d’AniList quand ils existent.</p>
+      {q.isPlaceholderData && <p className="px-4 py-1.5 text-[11px] text-ink-3">Chargement des titres…</p>}
+      {data.degraded && !q.isPlaceholderData && (
+        <p className="bg-chip px-4 py-2 text-[11px] text-ink-3">Titres et dates indisponibles pour le moment (numérotation seule).</p>
       )}
       {data.pageCount > 1 && (
         <div className="scroll-x flex gap-2 px-4 py-2">
@@ -56,12 +56,12 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
         </div>
       )}
       {data.episodes.map((e) => (
-        <div key={e.number} role="button" tabIndex={0} onClick={() => onOpenEpisode(season.anime.id, e.number)} onKeyDown={(k) => k.key === 'Enter' && onOpenEpisode(season.anime.id, e.number)} className="flex items-center gap-3 border-b border-divider px-4 py-2.5 last:border-b-0">
+        <div key={e.number} role="button" tabIndex={0} onClick={() => onOpenEpisode(season.anime.id, e.number)} onKeyDown={(k) => k.key === 'Enter' && onOpenEpisode(season.anime.id, e.number)} className="flex items-center gap-3 border-b border-divider px-4 py-2.5 last:border-b-0" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 56px' }}>
           <span className="w-8 shrink-0 text-[13px] font-bold text-ink-3">{e.number}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14px] font-medium text-ink">{e.title ?? `Épisode ${e.number}`}</span>
             <span className="block text-[11px] text-ink-3">
-              {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null].filter(Boolean).join(' · ')}
+              {[fmtDate(e.aired), season.offset > 0 ? `E${season.offset + e.number}` : null, e.filler ? 'Filler' : null, (watched.get(epKey(season.anime.id, e.number))?.count ?? 1) > 1 ? `Vu ×${watched.get(epKey(season.anime.id, e.number))!.count}` : null].filter(Boolean).join(' · ')}
             </span>
           </span>
           <div className={e.number > (season.aired ?? 0) ? 'opacity-40' : ''}>
@@ -77,7 +77,7 @@ function SeasonEpisodes({ season, franchise, onOpenEpisode, watched }: {
   );
 }
 
-function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchise; watched: Map<string, number>; onOpenEpisode: (seasonId: number, ep: number) => void }) {
+function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchise; watched: WatchMap; onOpenEpisode: (seasonId: number, ep: number) => void }) {
   const [open, setOpen] = useState<number | null>(null);
   const t = useTitle();
 
@@ -110,7 +110,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
       )}
       <div className="flex items-center justify-between px-page py-4">
         <span className="text-section-chip uppercase text-ink-2">Tous les épisodes</span>
-        <CheckButton checked={allDone} onToggle={() => markEpisodes(franchise, everything, !allDone)} size={26} />
+        <CheckButton checked={allDone} onToggle={() => toggleAll(franchise, watched)} size={26} />
       </div>
       <div className="flex flex-col gap-2.5 px-page">
         {franchise.seasons.map((s) => {
@@ -126,7 +126,7 @@ function EpisodesTab({ franchise, watched, onOpenEpisode }: { franchise: Franchi
                 <span className="text-[20px] font-bold text-ink">Saison {s.number}</span>
                 <IconChevronDown size={16} className={`ml-2 text-ink-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 <span className="ml-auto mr-3 text-[14px] font-medium text-ink-3">{done}/{total || '?'}</span>
-                <CheckButton checked={complete} onToggle={() => aired > 0 && markEpisodes(franchise, airedOf(s), !complete)} size={34} />
+                <CheckButton checked={complete} onToggle={() => toggleSeason(franchise, s, watched)} size={34} />
               </div>
               <div className="h-1 w-full bg-progress-track">
                 <motion.div className="h-full bg-green" initial={false} animate={{ width: `${ratio * 100}%` }} transition={{ duration: 0.3 }} />

@@ -29,7 +29,10 @@ export interface WatchedRow {
   seasonId: number;
   episode: number;
   showId: number;
+  /** Date du dernier visionnage. */
   watchedAt: number;
+  /** Nombre de visionnages (absent = 1) : « revoir » l'incrémente. */
+  count?: number;
 }
 
 export interface ReactionRow {

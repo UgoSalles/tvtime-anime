@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { browseByGenre, fetchAiringSchedule, fetchAnimeDetail, fetchDiscover, searchAnime } from './anilist';
-import { loadSeasonEpisodes } from './episodes';
+import { loadSeasonEpisodes, placeholderEpisodes } from './episodes';
 import { resolveFranchise } from './franchise';
 import type { FranchiseSeason } from './types';
 
@@ -52,7 +52,8 @@ export const useSeasonEpisodes = (season: FranchiseSeason | undefined, page: num
     queryFn: ({ signal }) => loadSeasonEpisodes(season!, page, signal),
     enabled: enabled && !!season,
     staleTime: 12 * HOUR,
-    placeholderData: keepPreviousData,
+    // Numéros d'épisodes affichés instantanément ; titres et dates s'ajoutent à l'arrivée des données.
+    placeholderData: () => (season ? placeholderEpisodes(season, page) : undefined),
   });
 
 export const useAiring = (ids: number[], days = 30) =>

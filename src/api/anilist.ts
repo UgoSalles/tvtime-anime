@@ -257,3 +257,15 @@ export async function fetchAniListUserList(userName: string, signal?: AbortSigna
       seen.set(e.media.id, { mediaId: e.media.id, status: e.status, progress: e.progress ?? 0, title: e.media.title.english || e.media.title.romaji || String(e.media.id) });
   return [...seen.values()];
 }
+
+/** Titres / vignettes d'épisodes d'AniList (secours quand Jikan est indisponible) : requête légère, mise en cache. */
+export function fetchStreamingEpisodes(id: number, signal?: AbortSignal): Promise<{ title: string; thumbnail: string | null }[]> {
+  return cached(
+    `stream:${id}`,
+    TTL.detail,
+    `query($id:Int){ Media(id:$id,type:ANIME){ streamingEpisodes{ title thumbnail } } }`,
+    { id },
+    (d) => (d.Media.streamingEpisodes ?? []).map((e: { title: string; thumbnail: string | null }) => ({ title: e.title, thumbnail: e.thumbnail ?? null })),
+    signal,
+  );
+}

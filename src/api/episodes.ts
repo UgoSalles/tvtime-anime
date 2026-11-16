@@ -1,13 +1,13 @@
-import { fetchAnimeDetail } from './anilist';
+import { fetchStreamingEpisodes } from './anilist';
 import { fetchJikanEpisodes } from './jikan';
-import type { AnimeDetail, EpisodeInfo, FranchiseSeason } from './types';
+import type { EpisodeInfo, FranchiseSeason } from './types';
 
 const EP_RE = /^\s*(?:episode|épisode|ep\.?)\s*(\d+)\s*[-–:]\s*(.+)$/i;
 
 /** Titres de secours : `streamingEpisodes` d'AniList (« Episode 5 - Titre »). */
-function fromStreaming(detail: AnimeDetail | undefined): Map<number, { title: string; thumbnail: string | null }> {
+function parseStreaming(list: { title: string; thumbnail: string | null }[]): Map<number, { title: string; thumbnail: string | null }> {
   const m = new Map<number, { title: string; thumbnail: string | null }>();
-  detail?.streamingEpisodes.forEach((e, i) => {
+  list.forEach((e, i) => {
     const hit = EP_RE.exec(e.title);
     m.set(hit ? Number(hit[1]) : i + 1, { title: hit ? hit[2]!.trim() : e.title, thumbnail: e.thumbnail });
   });
@@ -18,48 +18,63 @@ export const EPISODES_PER_PAGE = 100;
 
 export interface SeasonEpisodes {
   episodes: EpisodeInfo[];
-  /** Vrai si Jikan est injoignable : titres/dates alors issus d'AniList ou générés. */
+  /** Vrai si ni Jikan ni AniList n'ont donné de titres : numérotation seule. */
   degraded: boolean;
   total: number;
   page: number;
   pageCount: number;
 }
 
+const bounds = (season: FranchiseSeason, page: number) => {
+  const total = season.anime.episodes ?? season.aired ?? 0;
+  return { total, from: (page - 1) * EPISODES_PER_PAGE + 1, to: Math.min(total, page * EPISODES_PER_PAGE) };
+};
+
 /**
- * Une page (100 épisodes, comme Jikan) d'une saison. Fusionne : numérotation (AniList : total ou
- * épisodes diffusés), titres + dates (Jikan), à défaut titres/vignettes AniList (`streamingEpisodes`),
- * puis la date du prochain épisode (AniList `nextAiringEpisode`).
+ * Liste instantanée (numéros seuls, sans réseau) : l'écran l'affiche tout de suite
+ * pendant que les titres arrivent — plus de page blanche à attendre.
+ */
+export function placeholderEpisodes(season: FranchiseSeason, page: number): SeasonEpisodes {
+  const { total, from, to } = bounds(season, page);
+  const a = season.anime;
+  const episodes: EpisodeInfo[] = [];
+  for (let n = from; n <= to; n++)
+    episodes.push({ number: n, title: null, aired: a.nextAiring?.episode === n ? new Date(a.nextAiring.airingAt * 1000).toISOString() : null });
+  return { episodes, degraded: false, total, page, pageCount: Math.max(1, Math.ceil(total / EPISODES_PER_PAGE)) };
+}
+
+/**
+ * Une page (100 épisodes) d'une saison enrichie : titres + dates depuis Jikan (rapide, un seul appel) ;
+ * seulement si Jikan échoue, titres + vignettes depuis AniList (une requête légère).
  */
 export async function loadSeasonEpisodes(season: FranchiseSeason, page: number, signal?: AbortSignal): Promise<SeasonEpisodes> {
+  const base = placeholderEpisodes(season, page);
   const a = season.anime;
-  const total = a.episodes ?? season.aired ?? 0;
-  const from = (page - 1) * EPISODES_PER_PAGE + 1;
-  const to = Math.min(total, page * EPISODES_PER_PAGE);
   const byNumber = new Map<number, EpisodeInfo>();
-  let degraded = false;
 
-  // Jikan (titres, dates) et AniList (titres/vignettes de secours) en parallèle.
-  const [jikan, detail] = await Promise.allSettled([
-    a.idMal ? fetchJikanEpisodes(a.idMal, page, signal) : Promise.reject(new Error('pas d\'id MAL')),
-    fetchAnimeDetail(a.id, signal),
-  ]);
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  if (jikan.status === 'fulfilled') jikan.value.episodes.forEach((e) => byNumber.set(e.number, e));
-  else degraded = true;
-  const streaming = fromStreaming(detail.status === 'fulfilled' ? detail.value : undefined);
-
-  const episodes: EpisodeInfo[] = [];
-  for (let n = from; n <= to; n++) {
-    const j = byNumber.get(n);
-    const st = streaming.get(n);
-    episodes.push({
-      number: n,
-      title: j?.title ?? st?.title ?? null,
-      aired: j?.aired ?? (a.nextAiring?.episode === n ? new Date(a.nextAiring.airingAt * 1000).toISOString() : null),
-      filler: j?.filler,
-      recap: j?.recap,
-      thumbnail: st?.thumbnail ?? null,
-    });
+  let jikanOk = false;
+  if (a.idMal) {
+    try {
+      (await fetchJikanEpisodes(a.idMal, page, signal)).episodes.forEach((e) => byNumber.set(e.number, e));
+      jikanOk = byNumber.size > 0;
+    } catch (e) {
+      if (signal?.aborted) throw e;
+    }
   }
-  return { episodes, degraded: degraded && byNumber.size === 0, total, page, pageCount: Math.max(1, Math.ceil(total / EPISODES_PER_PAGE)) };
+
+  let streaming = new Map<number, { title: string; thumbnail: string | null }>();
+  if (!jikanOk) {
+    try {
+      streaming = parseStreaming(await fetchStreamingEpisodes(a.id, signal));
+    } catch (e) {
+      if (signal?.aborted) throw e;
+    }
+  }
+
+  const episodes = base.episodes.map((e) => {
+    const j = byNumber.get(e.number);
+    const st = streaming.get(e.number);
+    return { ...e, title: j?.title ?? st?.title ?? null, aired: j?.aired ?? e.aired, filler: j?.filler, recap: j?.recap, thumbnail: st?.thumbnail ?? null };
+  });
+  return { ...base, episodes, degraded: !jikanOk && streaming.size === 0 };
 }

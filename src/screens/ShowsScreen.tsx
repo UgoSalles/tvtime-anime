@@ -9,6 +9,7 @@ import { useAiring, useSeasonEpisodes } from '../api/hooks';
 import type { Franchise } from '../api/types';
 import { markEpisodes, epKey } from '../db/repo';
 import { toggleEpisode } from '../db/actions';
+import type { WatchMap } from '../db/hooks';
 import { stripSeasonSuffix, useTitle } from '../lib/titles';
 import { useLibrary, type ShowState } from '../lib/library';
 import { useUi, type ShowsTab } from '../store/ui';
@@ -135,7 +136,7 @@ const dayLabel = (ts: number) => new Date(ts * 1000).toLocaleDateString('fr-FR',
 function Upcoming(nav: Nav) {
   const showTitle = useShowTitle();
   const lib = useLibrary();
-  const watched = useMemo(() => new Set(lib.watched.map((w) => epKey(w.seasonId, w.episode))), [lib.watched]);
+  const watched = useMemo<WatchMap>(() => new Map(lib.watched.map((w) => [epKey(w.seasonId, w.episode), { at: w.watchedAt, count: w.count ?? 1 }])), [lib.watched]);
 
   // mediaId → (franchise, saison) des séries actives encore en diffusion / annoncées.
   const lookup = useMemo(() => {

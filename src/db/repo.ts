@@ -80,6 +80,22 @@ export async function markEpisodes(f: Franchise, eps: EpRef[], watched: boolean)
   });
 }
 
+/**
+ * « Revu » : ajoute un visionnage à chaque épisode (un épisode pas encore vu est simplement marqué vu).
+ */
+export async function rewatchEpisodes(f: Franchise, eps: EpRef[]) {
+  if (!eps.length) return;
+  const follow = await ensureFollow(f);
+  const now = Date.now();
+  await db.transaction('rw', db.watched, db.follows, async () => {
+    const existing = await db.watched.bulkGet(eps.map((e) => [e.seasonId, e.episode] as [number, number]));
+    await db.watched.bulkPut(
+      eps.map((e, i) => ({ ...e, showId: f.rootId, watchedAt: now, count: existing[i] ? (existing[i]!.count ?? 1) + 1 : 1 })),
+    );
+    await db.follows.update(follow.showId, { lastWatchedAt: now, status: 'active' });
+  });
+}
+
 /** Import : ajoute des épisodes vus avec leur date d'origine, sans écraser l'existant. */
 export async function importWatched(f: Franchise, rows: { seasonId: number; episode: number; at: number }[]): Promise<number> {
   const follow = await ensureFollow(f);

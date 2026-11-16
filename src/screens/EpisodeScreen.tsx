@@ -39,8 +39,9 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
   const root = franchise.data?.seasons[0]?.anime;
   const follow = useFollowOf(showId);
   const watchedMap = useWatchedMap(follow?.showId ?? franchise.data?.rootId ?? showId);
-  const watchedAt = watchedMap?.get(epKey(seasonId, episode));
-  const watched = watchedAt !== undefined;
+  const watchInfo = watchedMap?.get(epKey(seasonId, episode));
+  const watchedAt = watchInfo?.at;
+  const watched = !!watchInfo;
   const reaction = useReaction(seasonId, episode);
   const detail = useAnimeDetail(seasonId);
   const unaired = !!season && episode > (season.aired ?? 0);
@@ -69,7 +70,7 @@ export function EpisodeScreen({ showId, seasonId, episode, onBack, onOpenShow }:
         <div className="flex items-center justify-between border-b border-divider px-page py-3 text-[12px] text-ink-3">
           <div className="flex items-center gap-4">
             {aired && <span className="flex items-center gap-1.5"><IconCalendar size={16} /> {aired}</span>}
-            {watchedAt !== undefined && <span className="flex items-center gap-1.5"><IconCalendar size={16} /> Vu le {new Date(watchedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+            {watchedAt !== undefined && <span className="flex items-center gap-1.5"><IconCalendar size={16} /> {watchInfo && watchInfo.count > 1 ? `Vu ${watchInfo.count} fois · dernier : ` : 'Vu le '}{new Date(watchedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
           </div>
           <div className={unaired ? 'opacity-40' : ''}>
             <CheckButton checked={watched} onToggle={() => franchise.data && !unaired && toggleEpisode(franchise.data, seasonId, episode, watchedMap ?? new Map())} size={38} />

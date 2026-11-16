@@ -116,7 +116,7 @@ export function computeStats(lib: ReturnType<typeof useLibrary>): Stats {
   let minutes = 0;
   let recent = 0;
   for (const w of lib.watched) {
-    minutes += duration.get(w.seasonId) ?? DEFAULT_MINUTES;
+    minutes += (duration.get(w.seasonId) ?? DEFAULT_MINUTES) * (w.count ?? 1);
     if (w.watchedAt >= cutoff) recent++;
   }
   const totalHours = Math.floor(minutes / 60);

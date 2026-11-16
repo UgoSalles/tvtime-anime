@@ -26,6 +26,18 @@ function useOnline() {
   return online;
 }
 
+/**
+ * Onglet gardé monté : masqué par `visibility` (et non `display:none`) pour que le défilement et les listes
+ * virtualisées conservent leur position au retour — `display:none` les remet à zéro (saut visible).
+ */
+function TabLayer({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0" style={{ visibility: active ? 'visible' : 'hidden', pointerEvents: active ? 'auto' : 'none' }} inert={!active}>
+      {children}
+    </div>
+  );
+}
+
 export function App() {
   const online = useOnline();
   const { pathname } = useLocation();
@@ -41,21 +53,18 @@ export function App() {
     tabRef.current = pathname.startsWith('/decouvrir') ? 'discover' : pathname.startsWith('/profil') ? 'profile' : 'shows';
   }
   const tab = tabRef.current;
+  // Un onglet n'est monté qu'à sa première visite (pas de requêtes inutiles au démarrage), puis reste monté.
+  const [visited, setVisited] = useState<Record<string, boolean>>({ [tab]: true });
+  useEffect(() => setVisited((v) => (v[tab] ? v : { ...v, [tab]: true })), [tab]);
   const openShow = (id: number) => navigate(`/serie/${id}`);
   const openEpisode = (sid: number, seasonId: number, ep: number) => navigate(`/serie/${sid}/episode/${seasonId}-${ep}`);
   const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/'));
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-background">
-      <div className="absolute inset-0" style={{ display: tab === 'shows' ? 'block' : 'none' }}>
-        <ShowsScreen onOpenShow={openShow} onOpenEpisode={openEpisode} />
-      </div>
-      <div className="absolute inset-0" style={{ display: tab === 'discover' ? 'block' : 'none' }}>
-        <DiscoverScreen onOpenShow={openShow} />
-      </div>
-      <div className="absolute inset-0" style={{ display: tab === 'profile' ? 'block' : 'none' }}>
-        <ProfileScreen onOpenShow={openShow} />
-      </div>
+      {visited.shows && <TabLayer active={tab === 'shows'}><ShowsScreen onOpenShow={openShow} onOpenEpisode={openEpisode} /></TabLayer>}
+      {visited.discover && <TabLayer active={tab === 'discover'}><DiscoverScreen onOpenShow={openShow} /></TabLayer>}
+      {visited.profile && <TabLayer active={tab === 'profile'}><ProfileScreen onOpenShow={openShow} /></TabLayer>}
       <TabBar />
 
       <AnimatePresence>
