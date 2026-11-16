@@ -3,7 +3,11 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { APP_NAME } from './src/appConfig';
 
+// Sous-chemin d'hébergement (GitHub Pages : « /tvtime-anime/ »). Par défaut « / » (dev, Cloudflare, Vercel).
+const base = process.env.VITE_BASE ?? '/';
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -16,8 +20,8 @@ export default defineConfig({
         lang: 'fr',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         background_color: '#FFD200',
         theme_color: '#FFFFFF',
         icons: [
@@ -28,7 +32,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
-        navigateFallback: '/index.html',
+        navigateFallback: `${base}index.html`,
         // Les données API (AniList en POST, Jikan) sont cachées par l'app elle-même dans IndexedDB
         // (src/api/cache.ts). Le service worker s'occupe des images, déjà vues = disponibles hors-ligne.
         runtimeCaching: [
